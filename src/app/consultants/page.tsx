@@ -75,13 +75,13 @@ export default function ConsultantsPage() {
       <main>
         {/* Editorial Page Header */}
         <div className="border-b border-border bg-background">
-          <div className="shell py-8 lg:py-10">
+          <div className="shell py-4 lg:py-5">
             <p className="eyebrow text-primary">Corporate Directory</p>
-            <h1 className="mt-2 font-display text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-              Study Abroad Directory
+            <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
+              Agency & Consultant Directory
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              Discover verified education consultants, admissions advisors, and student service partners around the world.
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Vetted study-abroad agencies, education advisors and admissions specialists worldwide. Filter by location and service.
             </p>
           </div>
         </div>

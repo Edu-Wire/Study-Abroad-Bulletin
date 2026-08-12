@@ -23,12 +23,12 @@ export default function NewsPage() {
       <main>
         {/* Page header */}
         <div className="border-b border-border bg-background">
-          <div className="shell py-8 lg:py-10">
+          <div className="shell py-4 lg:py-5">
             <p className="eyebrow text-primary">News & Updates</p>
-            <h1 className="mt-2 font-display text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+            <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
               Study Abroad News
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
               Daily coverage of universities, scholarships, visa policy and admissions for international students.
             </p>
           </div>
