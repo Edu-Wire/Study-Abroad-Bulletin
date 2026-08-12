@@ -1,0 +1,326 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Study Abroad Intelligence — Premium Editorial Design System
+ * Inspired by premium digital newspapers: NYT, Monocle, Living Gulf, Gulf Education
+ * Palette: Ink Black + Warm Paper White + Editorial Red + Deep Navy
+ */
+
+@theme inline {
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-plus-jakarta-sans), var(--font-inter), ui-sans-serif, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-navy: var(--navy);
+  --color-navy-foreground: var(--navy-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-breaking: var(--breaking);
+  --color-breaking-soft: var(--breaking-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 3px;
+
+  /* Core editorial palette */
+  --ink: #111111;
+  --paper: #F7F6F2;
+  --red: #0F2C76;
+  --navy-hex: #071A33;
+  --muted-hex: #667085;
+  --border-hex: #D9D9D4;
+  --card-bg: #FDFCFA;
+
+  /* Semantic mappings */
+  --background: #F7F6F2;
+  --foreground: #111111;
+  --card: #FDFCFA;
+  --card-foreground: #111111;
+  --popover: #FDFCFA;
+  --popover-foreground: #111111;
+  --primary: #0F2C76;
+  --primary-foreground: #FFFFFF;
+  --primary-soft: #E6EEFA;
+  --navy: #071A33;
+  --navy-foreground: #F7F6F2;
+  --secondary: #F0EFE9;
+  --secondary-foreground: #111111;
+  --muted: #F0EFE9;
+  --muted-foreground: #667085;
+  --accent: #F0EFE9;
+  --accent-foreground: #111111;
+  --destructive: #0F2C76;
+  --destructive-foreground: #FFFFFF;
+  --breaking: #0F2C76;
+  --breaking-soft: #E6EEFA;
+  --success: #166534;
+  --success-soft: #DCFCE7;
+  --surface: #F0EFE9;
+  --paper: #F7F6F2;
+  --ink: #111111;
+  --border: #D9D9D4;
+  --input: #D9D9D4;
+  --ring: #0F2C76;
+  --sidebar: #F7F6F2;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #0F2C76;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F0EFE9;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #D9D9D4;
+  --sidebar-ring: #0F2C76;
+}
+
+.dark {
+  --background: #0D1117;
+  --foreground: #F7F6F2;
+  --card: #161B22;
+  --card-foreground: #F7F6F2;
+  --popover: #161B22;
+  --popover-foreground: #F7F6F2;
+  --primary: #2B54C4;
+  --primary-foreground: #FFFFFF;
+  --primary-soft: #0B1D4A;
+  --navy: #071A33;
+  --navy-foreground: #F7F6F2;
+  --secondary: #21262D;
+  --secondary-foreground: #F7F6F2;
+  --muted: #21262D;
+  --muted-foreground: #8B949E;
+  --accent: #21262D;
+  --accent-foreground: #F7F6F2;
+  --surface: #161B22;
+  --border: #30363D;
+  --input: #30363D;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background-color: #0F2C76;
+    color: #ffffff;
+  }
+}
+
+/* ============================================================
+   EDITORIAL UTILITY CLASSES
+   ============================================================ */
+
+/* Eyebrow / category labels — small uppercase tracked */
+@utility eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: var(--font-sans);
+}
+
+/* Meta information — dates, read time, author */
+@utility meta {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: var(--font-sans);
+}
+
+/* Container — max-width editorial canvas */
+@utility shell {
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+
+  @media (min-width: 1024px) {
+    padding-inline: 2rem;
+  }
+}
+
+/* Headline underline reveal on hover */
+@utility headline-link {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 0.25s ease;
+
+  &:hover {
+    background-size: 100% 1px;
+  }
+}
+
+/* Hide scrollbar */
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Editorial rule — thin separator */
+@utility editorial-rule {
+  display: block;
+  height: 1px;
+  background-color: var(--color-border);
+  border: none;
+}
+
+/* Section rule — thicker top rule for major sections */
+@utility section-rule {
+  display: block;
+  height: 2px;
+  background-color: var(--color-ink);
+  border: none;
+}
+
+/* Column rule — vertical divider */
+@utility col-rule {
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: var(--color-border);
+  }
+}
+
+/* Newspaper grid — 12-column editorial canvas */
+@utility newspaper-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0;
+}
+
+/* Ad label utility */
+@utility ad-label {
+  font-size: 0.5625rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+  font-family: var(--font-sans);
+}
+
+/* Pull quote style */
+@utility pull-quote {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--color-foreground);
+  border-left: 3px solid var(--color-primary);
+  padding-left: 1.25rem;
+  margin-inline: 0;
+}
+
+/* Article body prose */
+@utility article-prose {
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  color: var(--color-foreground);
+  max-width: 68ch;
+
+  p + p {
+    margin-top: 1.25em;
+  }
+
+  h2 {
+    font-size: 1.375rem;
+    font-weight: 700;
+    margin-top: 2em;
+    margin-bottom: 0.5em;
+    font-family: var(--font-display);
+  }
+
+  h3 {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-top: 1.75em;
+    margin-bottom: 0.5em;
+    font-family: var(--font-display);
+  }
+
+  blockquote {
+    border-left: 3px solid var(--color-primary);
+    padding-left: 1.25rem;
+    color: var(--color-muted-foreground);
+    font-style: italic;
+    margin-inline: 0;
+  }
+
+  ul {
+    list-style: disc;
+    padding-left: 1.5em;
+  }
+
+  ol {
+    list-style: decimal;
+    padding-left: 1.5em;
+  }
+}

@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  images: {
+    // Allow future external image domains
+    remotePatterns: [],
+  },
+  // Strict mode for better development warnings
+  reactStrictMode: true,
 };
 
 export default nextConfig;

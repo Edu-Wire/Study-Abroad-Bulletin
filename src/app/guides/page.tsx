@@ -1,0 +1,115 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Header } from "@/components/site/Header";
+import { Footer } from "@/components/site/Footer";
+import { MobileBottomNav } from "@/components/site/MobileBottomNav";
+import { SectionHeading } from "@/components/common/SectionHeading";
+import { GuideCard } from "@/components/cards/MiscCards";
+import { AdBanner } from "@/components/editorial/AdComponents";
+import { guides } from "@/data/mock";
+
+export const metadata: Metadata = {
+  title: "Study Abroad Guides — SOP, Visa, IELTS, Scholarships & More",
+  description:
+    "Practical, step-by-step guides for international students. Covering SOPs, visa applications, IELTS preparation, accommodation, scholarships and careers.",
+};
+
+const guideCategories = [...new Set(guides.map((g) => g.category))];
+
+export default function GuidesPage() {
+  const grouped = guideCategories.map((cat) => ({
+    category: cat,
+    guides: guides.filter((g) => g.category === cat),
+  }));
+
+  return (
+    <div className="min-h-screen bg-background pb-16 lg:pb-0">
+      <Header />
+      <main>
+        {/* Page header */}
+        <div className="border-b border-border bg-background">
+          <div className="shell py-8 lg:py-10">
+            <p className="eyebrow text-primary">Resources</p>
+            <h1 className="mt-2 font-display text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+              Study Abroad Guides
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Practical, step-by-step guidance from shortlisting to arrival. Written for
+              international students at every stage of the journey.
+            </p>
+          </div>
+        </div>
+
+        {/* Top ad */}
+        <div className="border-b border-border">
+          <div className="shell py-3">
+            <AdBanner slot="guides-listing-top" format="leaderboard" />
+          </div>
+        </div>
+
+        {/* Category nav */}
+        <div className="border-b border-border bg-surface">
+          <div className="shell">
+            <nav className="no-scrollbar flex overflow-x-auto">
+              {guideCategories.map((cat) => (
+                <span
+                  key={cat}
+                  className="eyebrow shrink-0 cursor-pointer px-4 py-3 text-muted-foreground border-b-2 border-transparent hover:text-primary hover:border-primary transition-colors first:border-primary first:text-primary"
+                >
+                  {cat}
+                </span>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        {/* All guides by category */}
+        <div className="shell py-10 lg:py-14 space-y-14">
+          {grouped.map(({ category, guides: catGuides }) => (
+            <section key={category}>
+              <SectionHeading
+                eyebrow="The Student Guide"
+                title={category}
+              />
+              <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                {catGuides.map((guide) => (
+                  <GuideCard key={guide.id} guide={guide} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        {/* Popular topics */}
+        <div className="border-t border-border bg-surface">
+          <div className="shell py-10">
+            <div className="section-rule mb-3" />
+            <div className="mt-3 mb-6">
+              <h2 className="font-display text-2xl font-extrabold text-foreground">
+                Popular Guide Topics
+              </h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                "SOP Writing", "LOR Guide", "IELTS Preparation", "TOEFL Tips",
+                "University Shortlisting", "Application Process", "Student Visa",
+                "Part-Time Jobs", "Accommodation Guide", "Cost of Living",
+                "Scholarships", "Post-Study Work", "Career Guidance",
+              ].map((topic) => (
+                <Link
+                  key={topic}
+                  href="/guides"
+                  className="border border-border bg-background px-4 py-2 eyebrow text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                >
+                  {topic}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </main>
+      <Footer />
+      <MobileBottomNav />
+    </div>
+  );
+}
