@@ -47,9 +47,13 @@ function UtilityBar({
   searchOpen: boolean;
 }) {
   const [date, setDate] = useState("");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     setDate(formatEditionDate());
+    if (typeof window !== "undefined") {
+      setIsLoggedIn(!!localStorage.getItem("authToken"));
+    }
   }, []);
 
   return (
@@ -73,12 +77,21 @@ function UtilityBar({
             <Search className="size-3" />
             <span className="hidden sm:inline">Search</span>
           </button>
-          <Link
-            href="/auth/login"
-            className="eyebrow text-muted-foreground transition-colors hover:text-foreground hidden sm:block"
-          >
-            Sign In
-          </Link>
+          {isLoggedIn ? (
+            <Link
+              href="/dashboard"
+              className="eyebrow text-primary font-bold transition-colors hover:text-navy hidden sm:block"
+            >
+              Dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/auth/login"
+              className="eyebrow text-muted-foreground transition-colors hover:text-foreground hidden sm:block"
+            >
+              Sign In
+            </Link>
+          )}
         </div>
       </div>
     </div>
@@ -266,6 +279,73 @@ export function Header() {
     setSearchOpen(false);
     setScrolled(window.scrollY > 8);
   }, [pathname]);
+
+  const isAuthPage = pathname.startsWith("/auth/");
+
+  if (isAuthPage) {
+    const isSignup = pathname === "/auth/signup";
+    const isLogin = pathname === "/auth/login";
+
+    return (
+      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
+        <div className="shell flex h-14 sm:h-16 items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="inline-block transition-transform hover:scale-[1.01]">
+              <Image
+                src="/logo/logo.png"
+                alt="Abroad Bulletin — Dream • Plan • Achieve"
+                width={320}
+                height={68}
+                priority
+                className="h-8 sm:h-10 w-auto object-contain"
+              />
+            </Link>
+            <Link
+              href="/"
+              className="hidden sm:inline-flex items-center text-xs font-medium text-muted-foreground hover:text-primary transition-colors border-l border-border pl-4"
+            >
+              ← Back to home
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {isSignup ? (
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline text-xs text-muted-foreground">
+                  Already have an account?
+                </span>
+                <Link
+                  href="/auth/login"
+                  className="h-8 sm:h-9 px-3.5 inline-flex items-center justify-center rounded-md border border-border text-xs font-semibold text-foreground hover:border-primary hover:text-primary transition-colors bg-background"
+                >
+                  Sign in
+                </Link>
+              </div>
+            ) : isLogin ? (
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline text-xs text-muted-foreground">
+                  Don&apos;t have an account?
+                </span>
+                <Link
+                  href="/auth/signup"
+                  className="h-8 sm:h-9 px-3.5 inline-flex items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground hover:bg-navy transition-colors"
+                >
+                  Get started
+                </Link>
+              </div>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="h-8 sm:h-9 px-3.5 inline-flex items-center justify-center rounded-md border border-border text-xs font-semibold text-foreground hover:border-primary hover:text-primary transition-colors bg-background"
+              >
+                Back to login
+              </Link>
+            )}
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className={cn("sticky top-0 z-50 transition-shadow", scrolled && "shadow-[0_1px_0_0_var(--color-border)]")}>
