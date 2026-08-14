@@ -13,7 +13,7 @@ export function NewsletterCard({
   if (variant === "dark") return null; // Footer handles the dark version
 
   return (
-    <section className={`border border-border bg-surface py-10 px-8 ${className ?? ""}`}>
+    <section className={`border border-border bg-surface py-8 px-4 sm:px-8 ${className ?? ""}`}>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-center lg:gap-12">
         <div className="min-w-0">
           <p className="eyebrow text-primary mb-2">The Weekly Briefing</p>
@@ -26,7 +26,7 @@ export function NewsletterCard({
           </p>
         </div>
         <form
-          className="flex flex-col gap-2 sm:flex-row"
+          className="flex flex-col gap-2"
           onSubmit={(e) => e.preventDefault()}
         >
           <input
@@ -34,11 +34,11 @@ export function NewsletterCard({
             required
             placeholder="Your email address"
             aria-label="Email address"
-            className="h-11 w-full min-w-0 border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary"
+            className="h-12 w-full min-w-0 border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary"
           />
           <button
             type="submit"
-            className="h-11 shrink-0 bg-primary px-5 eyebrow text-primary-foreground transition-opacity hover:opacity-90"
+            className="h-12 w-full bg-primary px-5 eyebrow text-primary-foreground transition-opacity hover:opacity-90"
           >
             Subscribe →
           </button>

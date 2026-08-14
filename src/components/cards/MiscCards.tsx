@@ -34,10 +34,10 @@ export function DeadlineCard({ deadline }: { deadline: Deadline }) {
   const monthYear = rest.join(" ");
 
   return (
-    <article className="grid grid-cols-[4rem_minmax(0,1fr)_auto] items-start gap-4 border-b border-border py-4 sm:grid-cols-[5rem_minmax(0,1fr)_auto]">
+    <article className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] sm:grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-2.5 sm:gap-4 border-b border-border py-4">
       {/* Calendar-style date block */}
       <div className="text-center">
-        <p className={cn("font-display text-3xl font-extrabold leading-none", urgent ? "text-primary" : "text-foreground")}>
+        <p className={cn("font-display text-2xl sm:text-3xl font-extrabold leading-none", urgent ? "text-primary" : "text-foreground")}>
           {dayStr}
         </p>
         <p className="eyebrow mt-0.5 text-muted-foreground">{monthYear}</p>

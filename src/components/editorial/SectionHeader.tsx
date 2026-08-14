@@ -25,10 +25,10 @@ export function SectionHeader({
   ruled?: boolean;
 }) {
   return (
-    <div className={cn("min-w-0", className)}>
+    <div className={cn("w-full min-w-0", className)}>
       {ruled && <SectionRule />}
-      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
-        <div className="min-w-0">
+      <div className="mt-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
           {eyebrow && (
             <p className="eyebrow mb-2 text-primary">{eyebrow}</p>
           )}

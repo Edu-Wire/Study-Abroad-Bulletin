@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -19,13 +19,6 @@ const mainNav = [
   { label: "Guides", href: "/guides" },
 ];
 
-const utilityLinks = [
-  { label: "Tracker", href: "/immigration-tracker" },
-  { label: "Directory", href: "/consultants" },
-  { label: "About", href: "/about" },
-  { label: "Contact", href: "/contact" },
-];
-
 /** Format today's date as "11 AUGUST 2026" */
 function formatEditionDate(): string {
   const now = new Date();
@@ -38,7 +31,7 @@ function formatEditionDate(): string {
     .toUpperCase();
 }
 
-/** Top utility bar — thin, all-caps, restrained */
+/** Top utility bar — thin, all-caps, restrained. Visible on desktop (lg+). */
 function UtilityBar({
   onSearchClick,
   searchOpen,
@@ -57,10 +50,10 @@ function UtilityBar({
   }, []);
 
   return (
-    <div className="border-b border-border bg-background">
+    <div className="hidden lg:block border-b border-border bg-background">
       <div className="shell flex h-8 items-center justify-between gap-4">
         {/* Left — edition label */}
-        <p className="eyebrow hidden text-muted-foreground sm:block">
+        <p className="eyebrow text-muted-foreground">
           Global Study Abroad Edition
         </p>
         {/* Center — date */}
@@ -75,19 +68,19 @@ function UtilityBar({
             className="eyebrow text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1"
           >
             <Search className="size-3" />
-            <span className="hidden sm:inline">Search</span>
+            <span>Search</span>
           </button>
           {isLoggedIn ? (
             <Link
               href="/dashboard"
-              className="eyebrow text-primary font-bold transition-colors hover:text-navy hidden sm:block"
+              className="eyebrow text-primary font-bold transition-colors hover:text-navy"
             >
               Dashboard
             </Link>
           ) : (
             <Link
               href="/auth/login"
-              className="eyebrow text-muted-foreground transition-colors hover:text-foreground hidden sm:block"
+              className="eyebrow text-muted-foreground transition-colors hover:text-foreground"
             >
               Sign In
             </Link>
@@ -98,10 +91,10 @@ function UtilityBar({
   );
 }
 
-/** Masthead — the publication identity */
+/** Masthead — publication identity. Visible on desktop (lg+), hidden on scroll to save space. */
 function Masthead() {
   return (
-    <div className="border-b border-border bg-background">
+    <div className="hidden lg:block border-b border-border bg-background">
       <div className="shell flex items-center justify-center py-4 sm:py-5">
         <Link href="/" className="inline-block transition-transform hover:scale-[1.01] active:scale-[0.99]">
           <Image
@@ -118,18 +111,65 @@ function Masthead() {
   );
 }
 
-/** Navigation rail — newspaper-style horizontal nav */
-function NavRail({
-  pathname,
+/** Mobile header bar — clean 56px bar with logo + search toggle + hamburger. Visible on <lg. */
+function MobileHeader({
+  onSearchClick,
+  searchOpen,
   onMenuClick,
 }: {
-  pathname: string;
+  onSearchClick: () => void;
+  searchOpen: boolean;
   onMenuClick: () => void;
 }) {
   return (
-    <div className="border-b border-border bg-background relative">
+    <div className="lg:hidden border-b border-border bg-background">
+      <div className="shell flex h-14 items-center justify-between gap-3">
+        {/* Logo */}
+        <Link href="/" className="shrink-0 inline-block" aria-label="Home">
+          <Image
+            src="/logo/logo.png"
+            alt="Abroad Bulletin"
+            width={320}
+            height={68}
+            priority
+            className="h-9 w-auto object-contain"
+          />
+        </Link>
+
+        {/* Right controls */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={searchOpen ? "Close search" : "Open search"}
+            aria-expanded={searchOpen}
+            onClick={onSearchClick}
+            className="grid size-10 place-items-center text-foreground transition-colors hover:text-primary rounded-md"
+          >
+            {searchOpen ? <X className="size-5" /> : <Search className="size-5" />}
+          </button>
+          <button
+            type="button"
+            aria-label="Open navigation menu"
+            onClick={onMenuClick}
+            className="grid size-10 place-items-center text-foreground transition-colors hover:text-primary rounded-md"
+          >
+            <Menu className="size-5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Navigation rail — desktop full centered nav. Strictly hidden on mobile to prevent overflow. */
+function NavRail({ pathname }: { pathname: string }) {
+  return (
+    <div className="hidden lg:block border-b border-border bg-background">
       <div className="shell flex items-center justify-center">
-        <nav className="no-scrollbar flex items-center justify-start sm:justify-center overflow-x-auto flex-1 pr-12 lg:pr-0">
+        <nav
+          className="flex items-center justify-center"
+          aria-label="Main navigation"
+        >
           {mainNav.map((item) => {
             const isActive =
               item.href === "/"
@@ -140,7 +180,7 @@ function NavRail({
                 key={item.label}
                 href={item.href}
                 className={cn(
-                  "eyebrow relative shrink-0 px-3.5 sm:px-4 lg:px-5 py-3 text-foreground transition-colors hover:text-primary",
+                  "eyebrow relative shrink-0 px-5 py-3 text-foreground transition-colors hover:text-primary",
                   "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary after:transition-transform after:duration-200",
                   isActive
                     ? "text-primary after:scale-x-100"
@@ -152,21 +192,12 @@ function NavRail({
             );
           })}
         </nav>
-        {/* Mobile menu button aligned inside NavRail */}
-        <button
-          type="button"
-          aria-label="Open menu"
-          onClick={onMenuClick}
-          className="absolute right-4 top-1/2 -translate-y-1/2 grid size-9 place-items-center text-foreground transition-colors hover:text-primary lg:hidden shrink-0"
-        >
-          <Menu className="size-5" />
-        </button>
       </div>
     </div>
   );
 }
 
-/** Mobile drawer menu */
+/** Mobile drawer menu — accessible slideout dialog */
 function MobileDrawer({
   open,
   onClose,
@@ -175,41 +206,78 @@ function MobileDrawer({
   onClose: () => void;
 }) {
   const pathname = usePathname();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const firstLinkRef = useRef<HTMLAnchorElement>(null);
+
+  // Focus close button when drawer opens
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => closeButtonRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  // Keyboard: Escape closes drawer
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
   if (!open) return null;
+
   return (
-    <div className="fixed inset-0 z-50 lg:hidden">
+    <div
+      className="fixed inset-0 z-50 lg:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Navigation menu"
+    >
+      {/* Backdrop */}
       <button
         aria-label="Close menu"
         onClick={onClose}
-        className="absolute inset-0 bg-ink/30"
+        tabIndex={-1}
+        className="absolute inset-0 bg-ink/40 backdrop-blur-sm cursor-default w-full h-full border-0"
       />
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-sm flex-col bg-background border-l border-border">
+
+      {/* Drawer panel */}
+      <div className="absolute inset-y-0 right-0 flex w-full max-w-xs flex-col bg-background border-l border-border shadow-2xl">
         {/* Drawer header */}
-        <div className="flex h-14 items-center justify-between border-b border-border px-5">
-          <Link href="/" onClick={onClose} className="font-display text-lg font-extrabold text-foreground">
-            SAI
+        <div className="flex h-14 items-center justify-between border-b border-border px-4 shrink-0">
+          <Link href="/" onClick={onClose} className="shrink-0">
+            <Image
+              src="/logo/logo.png"
+              alt="Abroad Bulletin"
+              width={200}
+              height={42}
+              className="h-8 w-auto object-contain"
+            />
           </Link>
           <button
+            ref={closeButtonRef}
             type="button"
             aria-label="Close menu"
             onClick={onClose}
-            className="grid size-9 place-items-center text-foreground hover:text-primary transition-colors"
+            className="grid size-10 place-items-center text-foreground hover:text-primary transition-colors rounded-md"
           >
             <X className="size-5" />
           </button>
         </div>
 
         {/* Search */}
-        <div className="border-b border-border px-5 py-4">
+        <div className="border-b border-border px-4 py-3 shrink-0">
           <SearchWithDropdown
             placeholder="Search…"
             onClose={onClose}
           />
         </div>
 
-        {/* Nav items */}
-        <nav className="flex-1 overflow-y-auto">
-          {mainNav.map((item) => {
+        {/* Nav items — scrollable */}
+        <nav className="flex-1 overflow-y-auto" aria-label="Drawer navigation">
+          {mainNav.map((item, idx) => {
             const isActive =
               item.href === "/"
                 ? pathname === "/"
@@ -218,30 +286,49 @@ function MobileDrawer({
               <Link
                 key={item.label}
                 href={item.href}
+                ref={idx === 0 ? firstLinkRef : undefined}
                 onClick={onClose}
                 className={cn(
-                  "flex items-center justify-between border-b border-border px-5 py-4 font-display text-base font-bold text-foreground transition-colors hover:text-primary",
-                  isActive && "text-primary",
+                  "flex items-center justify-between border-b border-border px-4 py-4 font-display text-base font-bold text-foreground transition-colors hover:text-primary hover:bg-surface",
+                  isActive && "text-primary bg-primary-soft/40",
                 )}
               >
-                {item.label}
-                <span className="text-border">→</span>
+                <span>{item.label}</span>
+                <span className="text-muted-foreground text-lg">›</span>
               </Link>
             );
           })}
+
+          {/* Additional links */}
+          {[
+            { label: "About", href: "/about" },
+            { label: "Contact", href: "/contact" },
+          ].map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              onClick={onClose}
+              className="flex items-center justify-between border-b border-border px-4 py-3.5 eyebrow text-muted-foreground transition-colors hover:text-primary hover:bg-surface"
+            >
+              <span>{item.label}</span>
+              <span className="text-muted-foreground">›</span>
+            </Link>
+          ))}
         </nav>
 
         {/* Auth buttons */}
-        <div className="grid grid-cols-2 gap-2 border-t border-border p-5">
+        <div className="grid grid-cols-2 gap-2 border-t border-border p-4 shrink-0">
           <Link
             href="/auth/login"
-            className="border border-border py-2.5 text-center eyebrow text-foreground hover:border-primary hover:text-primary transition-colors"
+            onClick={onClose}
+            className="h-11 flex items-center justify-center border border-border eyebrow text-foreground hover:border-primary hover:text-primary transition-colors"
           >
             Sign In
           </Link>
           <Link
             href="/auth/signup"
-            className="bg-primary py-2.5 text-center eyebrow text-primary-foreground hover:opacity-90 transition-opacity"
+            onClick={onClose}
+            className="h-11 flex items-center justify-center bg-primary eyebrow text-primary-foreground hover:opacity-90 transition-opacity"
           >
             Get Started
           </Link>
@@ -252,7 +339,7 @@ function MobileDrawer({
 }
 
 export function Header() {
-  const router = useRouter();
+  useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -286,7 +373,7 @@ export function Header() {
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
         <div className="shell flex h-14 sm:h-16 items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Link href="/" className="inline-block transition-transform hover:scale-[1.01]">
+            <Link href="/" className="inline-block transition-transform hover:scale-[1.01] shrink-0">
               <Image
                 src="/logo/logo.png"
                 alt="Abroad Bulletin — Dream • Plan • Achieve"
@@ -304,7 +391,7 @@ export function Header() {
             </Link>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             {isSignup ? (
               <div className="flex items-center gap-2">
                 <span className="hidden sm:inline text-xs text-muted-foreground">
@@ -345,13 +432,13 @@ export function Header() {
 
   return (
     <header className={cn("sticky top-0 z-50 transition-shadow", scrolled && "shadow-[0_1px_0_0_var(--color-border)]")}>
-      {/* 1. Utility bar */}
+      {/* 1. Utility bar — desktop only */}
       <UtilityBar
         onSearchClick={() => setSearchOpen((o) => !o)}
         searchOpen={searchOpen}
       />
 
-      {/* 2. Masthead — hidden on scroll to save space */}
+      {/* 2. Masthead — desktop only, hidden on scroll */}
       <div
         className={cn(
           "overflow-hidden transition-all duration-300",
@@ -361,8 +448,15 @@ export function Header() {
         <Masthead />
       </div>
 
-      {/* 3. Navigation rail */}
-      <NavRail pathname={pathname} onMenuClick={() => setMenuOpen(true)} />
+      {/* 3. Mobile header bar — logo + icons */}
+      <MobileHeader
+        onSearchClick={() => setSearchOpen((o) => !o)}
+        searchOpen={searchOpen}
+        onMenuClick={() => setMenuOpen(true)}
+      />
+
+      {/* 4. Navigation rail — desktop full centered nav only (hidden on mobile) */}
+      <NavRail pathname={pathname} />
 
       {/* Search panel */}
       {searchOpen && (

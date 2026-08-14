@@ -69,7 +69,7 @@ export function FindYourUniversity() {
 
   return (
     <section className="border-b border-border bg-background">
-      <div className="shell py-10 lg:py-14">
+      <div className="shell py-8 lg:py-14 min-w-0">
         <SectionHeading
           eyebrow="University Discovery"
           title="Find Your University"
@@ -78,8 +78,8 @@ export function FindYourUniversity() {
           actionHref="/universities"
         />
 
-        {/* Filter bar — editorial style */}
-        <div className="mt-6 border border-border bg-surface p-4 sm:p-5">
+        {/* Filter bar — editorial style with min-w-0 max-w-full overflow-hidden */}
+        <div className="mt-6 w-full max-w-full min-w-0 overflow-hidden border border-border bg-surface p-3 sm:p-5">
           <SearchBar
             size="lg"
             value={query}
@@ -88,8 +88,8 @@ export function FindYourUniversity() {
             className="bg-background"
           />
 
-          {/* Compact editorial filter selects */}
-          <div className="no-scrollbar mt-4 flex items-center gap-2 overflow-x-auto pb-1">
+          {/* Compact editorial filter selects — horizontal scroll on mobile */}
+          <div className="no-scrollbar mt-3 flex w-full max-w-full min-w-0 items-center gap-2 overflow-x-auto pb-1 overscroll-contain touch-pan-x">
             {(Object.keys(uniFilters) as FilterKey[]).map((key) => (
               <label key={key} className="shrink-0">
                 <span className="sr-only">{key}</span>
@@ -98,7 +98,7 @@ export function FindYourUniversity() {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, [key]: e.target.value }))
                   }
-                  className={`h-8 border bg-background px-2.5 text-xs font-semibold outline-none transition-colors cursor-pointer
+                  className={`h-9 border bg-background px-2 text-xs font-semibold outline-none transition-colors cursor-pointer
                     ${filters[key] === "All"
                       ? "border-border text-muted-foreground"
                       : "border-primary text-primary"
@@ -144,7 +144,7 @@ export function FindYourUniversity() {
             </p>
           </div>
         ) : (
-          <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-7 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 min-w-0">
             {results.slice(0, 6).map((university) => (
               <UniversityCard key={university.id} university={university} />
             ))}

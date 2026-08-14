@@ -324,7 +324,7 @@ export function SearchWithDropdown({
           aria-label="Search suggestions"
           className={cn(
             "absolute left-0 right-0 top-[calc(100%+4px)] z-[200]",
-            "overflow-hidden rounded-md border border-border bg-background shadow-lg",
+            "max-h-[70vh] overflow-y-auto rounded-md border border-border bg-background shadow-lg",
           )}
         >
           {hasResults ? (

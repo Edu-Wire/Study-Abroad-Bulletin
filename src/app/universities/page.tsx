@@ -13,14 +13,14 @@ export const metadata: Metadata = {
 
 export default function UniversitiesPage() {
   return (
-    <div className="min-h-screen bg-background pb-16 lg:pb-0">
+    <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 w-full max-w-full overflow-x-clip">
       <Header />
-      <main>
+      <main className="min-w-0">
         {/* Page header */}
         <div className="border-b border-border bg-background">
-          <div className="shell py-4 lg:py-5">
+          <div className="shell py-4 lg:py-5 min-w-0">
             <p className="eyebrow text-primary">University Discovery</p>
-            <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
+            <h1 className="mt-1 font-display text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-foreground break-words">
               Find Your University
             </h1>
             <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -32,7 +32,7 @@ export default function UniversitiesPage() {
 
         {/* Top ad */}
         <div className="border-b border-border">
-          <div className="shell py-3">
+          <div className="shell py-3 min-w-0">
             <AdBanner slot="universities-listing-top" format="leaderboard" />
           </div>
         </div>

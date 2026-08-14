@@ -61,8 +61,8 @@ export default async function CountryDetailPage({ params }: Props) {
     slug === "canada"
       ? await getCanadaNews()
       : slug === "uk"
-      ? await getUKNews()
-      : news.filter((n) => n.country === country.name);
+        ? await getUKNews()
+        : news.filter((n) => n.country === country.name);
 
   const countryScholarships = scholarships.filter((s) => s.country === country.name);
   const countryDeadlines = immigrationDeadlines.filter((d) => d.country === country.name);

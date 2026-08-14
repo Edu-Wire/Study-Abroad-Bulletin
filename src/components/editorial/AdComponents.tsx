@@ -27,14 +27,14 @@ export function AdBanner({
   className?: string;
 }) {
   const heights: Record<string, string> = {
-    leaderboard: "h-[90px]",
-    billboard: "h-[250px]",
-    "native-article": "h-[200px]",
+    leaderboard: "h-[60px] sm:h-[90px]",
+    billboard: "h-[200px] sm:h-[250px]",
+    "native-article": "h-[160px] sm:h-[200px]",
   };
 
   return (
     <div
-      className={cn("w-full", className)}
+      className={cn("w-full overflow-hidden", className)}
       data-ad-slot={slot}
       data-ad-format={format}
     >
@@ -43,8 +43,8 @@ export function AdBanner({
       </p>
       <div
         className={cn(
-          "flex items-center justify-center border border-dashed border-border bg-surface",
-          heights[format] ?? "h-[90px]",
+          "flex w-full items-center justify-center border border-dashed border-border bg-surface",
+          heights[format] ?? "h-[60px] sm:h-[90px]",
         )}
         aria-hidden
       >
@@ -77,7 +77,7 @@ export function AdSidebar({
 
   return (
     <div
-      className={cn("w-full max-w-[320px]", className)}
+      className={cn("w-full", className)}
       data-ad-slot={slot}
       data-ad-format={format}
     >

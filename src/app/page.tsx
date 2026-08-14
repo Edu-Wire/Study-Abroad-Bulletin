@@ -39,15 +39,15 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-background pb-16 lg:pb-0">
+    <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 overflow-x-clip">
       <Header />
-      <main>
+      <main className="min-w-0">
         {/* Breaking strip above hero */}
         <BreakingStrip />
 
         {/* Ad placement — homepage top */}
         <div className="border-b border-border bg-background">
-          <div className="shell py-3">
+          <div className="shell py-3 min-w-0">
             <AdBanner slot="homepage-top" format="leaderboard" />
           </div>
         </div>
@@ -60,7 +60,7 @@ export default function HomePage() {
 
         {/* Ad between Briefing and Latest News */}
         <div className="border-b border-border bg-surface">
-          <div className="shell py-4">
+          <div className="shell py-4 min-w-0">
             <AdBanner slot="homepage-between-briefing-news" format="leaderboard" />
           </div>
         </div>
@@ -76,7 +76,7 @@ export default function HomePage() {
 
         {/* Ad between universities and scholarships */}
         <div className="border-b border-border bg-surface">
-          <div className="shell py-4">
+          <div className="shell py-4 min-w-0">
             <AdBanner slot="homepage-between-news-universities" format="leaderboard" />
           </div>
         </div>
@@ -101,7 +101,7 @@ export default function HomePage() {
 
         {/* Newsletter */}
         <section className="border-b border-border">
-          <div className="shell py-10">
+          <div className="shell py-8 sm:py-10 min-w-0">
             <NewsletterCard />
           </div>
         </section>

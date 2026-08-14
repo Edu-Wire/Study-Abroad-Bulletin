@@ -21,10 +21,10 @@ export function SectionHeading({
   className?: string;
 }) {
   return (
-    <div className={cn("min-w-0", className)}>
+    <div className={cn("w-full min-w-0", className)}>
       <div className="section-rule mb-3" />
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 flex-1">
           {eyebrow && (
             <p className="eyebrow mb-2 text-primary">{eyebrow}</p>
           )}
@@ -40,7 +40,7 @@ export function SectionHeading({
         {action && actionHref ? (
           <Link
             href={actionHref}
-            className="eyebrow hidden shrink-0 text-primary hover:text-foreground sm:block transition-colors"
+            className="eyebrow hidden sm:block shrink-0 text-primary hover:text-foreground transition-colors"
           >
             {action} →
           </Link>

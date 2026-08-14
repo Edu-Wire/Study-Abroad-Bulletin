@@ -54,11 +54,10 @@ export default async function ScholarshipDetailPage({ params }: Props) {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   <span
-                    className={`eyebrow border px-2 py-0.5 ${
-                      s.type === "Fully Funded"
+                    className={`eyebrow border px-2 py-0.5 ${s.type === "Fully Funded"
                         ? "border-success/25 bg-success-soft text-success"
                         : "border-border bg-surface text-muted-foreground"
-                    }`}
+                      }`}
                   >
                     {s.type}
                   </span>
