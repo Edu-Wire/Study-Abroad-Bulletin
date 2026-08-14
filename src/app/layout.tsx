@@ -37,6 +37,13 @@ export const metadata: Metadata = {
     description:
       "Discover universities, scholarships, visa updates and the latest study-abroad news for international students.",
   },
+  icons: {
+    icon: [
+      { url: "/logo/ab-logo.png", type: "image/png" },
+    ],
+    shortcut: "/logo/ab-logo.png",
+    apple: "/logo/ab-logo.png",
+  },
   twitter: {
     card: "summary_large_image",
     title: "Study Abroad Intelligence",
