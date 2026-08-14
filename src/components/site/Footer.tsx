@@ -133,11 +133,11 @@ export function Footer() {
         <div className="mb-10 border-b border-white/10 pb-10">
           <Link href="/" className="inline-block transition-transform hover:scale-[1.01] active:scale-[0.99]">
             <Image
-              src="/logo/footer-logo.png"
+              src="/logo/footer-logo-v3.png"
               alt="Abroad Bulletin — Dream • Plan • Achieve"
-              width={874}
-              height={216}
-              className="h-14 w-auto object-contain sm:h-16 md:h-20"
+              width={578}
+              height={125}
+              className="h-16 w-auto object-contain object-left sm:h-20 md:h-24"
             />
           </Link>
           <p className="mt-4 max-w-sm text-sm text-navy-foreground/55 leading-relaxed">

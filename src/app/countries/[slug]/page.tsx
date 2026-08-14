@@ -16,7 +16,13 @@ import { DeadlineTrackerCard } from "@/components/cards/DeadlineTrackerCard";
 import { ConsultantCard } from "@/components/cards/ConsultantCard";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner, InlineAd } from "@/components/editorial/AdComponents";
-import { getCanadaNews, getUKNews } from "@/lib/rss";
+import {
+  getCanadaNews,
+  getUKNews,
+  getGermanyNews,
+  getNetherlandsNews,
+  getFranceNews,
+} from "@/lib/rss";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -54,14 +60,20 @@ export default async function CountryDetailPage({ params }: Props) {
 
   const countryUniversities = universities.filter((u) => u.country === country.name);
 
-  // Canada and UK: use ONLY real RSS data (no mock fallback during this testing phase).
-  // All other countries: filter mock articles as before.
-  const rssCountries = ["canada", "uk"] as const;
+  // Enabled RSS countries use real live RSS data.
+  // All other countries filter mock articles as fallback.
+  const rssCountries = ["canada", "uk", "germany", "netherlands", "france"] as const;
   const countryNews =
     slug === "canada"
       ? await getCanadaNews()
       : slug === "uk"
       ? await getUKNews()
+      : slug === "germany"
+      ? await getGermanyNews()
+      : slug === "netherlands"
+      ? await getNetherlandsNews()
+      : slug === "france"
+      ? await getFranceNews()
       : news.filter((n) => n.country === country.name);
 
   const countryScholarships = scholarships.filter((s) => s.country === country.name);

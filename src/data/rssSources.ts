@@ -77,6 +77,71 @@ export const rssSources: RssSource[] = [
     fallbackImage: "/images/news-uk.jpg",
   },
 
+  // Germany
+  {
+    id: "germany-aa",
+    name: "German Federal Foreign Office",
+    country: "Germany",
+    category: "Visa",
+    sourceType: "government",
+    // Official Federal Foreign Office (Auswärtiges Amt) RSS 2.0 feed
+    // Verified live on 2026-08-14: returns valid RSS XML with current foreign policy and global mobility news.
+    feedUrl:
+      "https://www.auswaertiges-amt.de/static/includes/rss_en/RSS_Aktuelle_Artikel.xml",
+    enabled: true,
+    slugPrefix: "deaa",
+    fallbackImage: "/images/news-germany.jpg",
+  },
+
+  // Netherlands
+  {
+    id: "netherlands-gov",
+    name: "Government of the Netherlands",
+    country: "Netherlands",
+    category: "Visa",
+    sourceType: "government",
+    // Official Government.nl immigration & residence feed
+    // Verified live on 2026-08-14: returns valid RSS 2.0 XML with official residence & visa news.
+    feedUrl:
+      "https://www.government.nl/api/rss?query=%7B%22filters%22%3A%5B%5D%2C%22resultSearchTerm%22%3A%22immigration%22%2C%22pageTitle%22%3A%22Immigration%22%7D",
+    enabled: true,
+    slugPrefix: "nlgov",
+    fallbackImage: "/images/news-germany.jpg",
+  },
+
+  // France
+  {
+    id: "france-service-public",
+    name: "Service-Public (Government of France)",
+    country: "France",
+    category: "Visa",
+    sourceType: "government",
+    // Official Service-Public RSS 2.0 feed
+    // Verified live on 2026-08-14: returns valid RSS 2.0 XML with official French administrative & legal updates.
+    feedUrl:
+      "https://www.service-public.gouv.fr/abonnements/rss/actu-actualites-particuliers.rss",
+    enabled: true,
+    slugPrefix: "frsp",
+    fallbackImage: "/images/news-library.jpg",
+  },
+
+  // Ireland
+  {
+    id: "ireland-isd",
+    name: "Immigration Service Delivery Ireland",
+    country: "Ireland",
+    category: "Visa",
+    sourceType: "government",
+    feedUrl: "",
+    enabled: false,
+    disabledReason:
+      "Irish Immigration Service Delivery (irishimmigration.ie / justice.ie) does not publish " +
+      "a verified public RSS/Atom XML feed. News updates are distributed via standard HTML notices. " +
+      "Re-enable when a verified stable machine-readable XML feed is established.",
+    slugPrefix: "ieisd",
+    fallbackImage: "/images/news-uk.jpg",
+  },
+
   // Australia
   {
     id: "australia-home-affairs",

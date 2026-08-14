@@ -22,6 +22,9 @@
 
 import { getIRCCNews } from "./ircc";
 import { getUKVINews } from "./uk";
+import { getGermanyNews as getGermanGovNews } from "./germany";
+import { getNetherlandsNews as getDutchGovNews } from "./netherlands";
+import { getFranceNews as getFrenchGovNews } from "./france";
 import { news as mockNews } from "@/data/mock";
 import type { NewsArticle } from "@/data/mock";
 
@@ -32,7 +35,6 @@ import type { NewsArticle } from "@/data/mock";
 /**
  * Returns ONLY real IRCC RSS articles for Canada.
  * Used by /countries/canada to display live government news.
- * If the feed fails, returns [] — the page shows an appropriate empty state.
  */
 export async function getCanadaNews(): Promise<NewsArticle[]> {
   return getIRCCNews();
@@ -41,10 +43,33 @@ export async function getCanadaNews(): Promise<NewsArticle[]> {
 /**
  * Returns ONLY real UKVI RSS articles for United Kingdom.
  * Used by /countries/uk to display live government news.
- * If the feed fails, returns [] — the page shows an appropriate empty state.
  */
 export async function getUKNews(): Promise<NewsArticle[]> {
   return getUKVINews();
+}
+
+/**
+ * Returns ONLY real German Federal Foreign Office articles for Germany.
+ * Used by /countries/germany to display live government news.
+ */
+export async function getGermanyNews(): Promise<NewsArticle[]> {
+  return getGermanGovNews();
+}
+
+/**
+ * Returns ONLY real Government.nl articles for Netherlands.
+ * Used by /countries/netherlands to display live government news.
+ */
+export async function getNetherlandsNews(): Promise<NewsArticle[]> {
+  return getDutchGovNews();
+}
+
+/**
+ * Returns ONLY real Service-Public articles for France.
+ * Used by /countries/france to display live government news.
+ */
+export async function getFranceNews(): Promise<NewsArticle[]> {
+  return getFrenchGovNews();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,18 +83,24 @@ export async function getUKNews(): Promise<NewsArticle[]> {
  * Order: RSS articles appear first (newest government news at the top),
  * followed by mock articles for all other content.
  *
- * Deduplication: slug-based. If two sources ever produce the same slug
- * (very unlikely given the source prefixes), the first one wins.
+ * Deduplication: slug-based.
  *
- * Fallback: if ALL RSS sources fail, the function still returns the full
- * mock dataset — the site never goes empty.
+ * Failure isolation: uses Promise.allSettled() so any single failed feed
+ * never crashes or blocks the other feeds.
  */
 export async function getAllNews(): Promise<NewsArticle[]> {
-  // Fetch all sources in parallel. allSettled means one failure does NOT
-  // reject the whole promise — we get a result (fulfilled or rejected) for each.
-  const [canadaResult, ukResult] = await Promise.allSettled([
+  const [
+    canadaResult,
+    ukResult,
+    germanyResult,
+    netherlandsResult,
+    franceResult,
+  ] = await Promise.allSettled([
     getIRCCNews(),
     getUKVINews(),
+    getGermanGovNews(),
+    getDutchGovNews(),
+    getFrenchGovNews(),
   ]);
 
   // Collect articles from whichever sources succeeded
@@ -87,9 +118,25 @@ export async function getAllNews(): Promise<NewsArticle[]> {
     console.error("[RSS Aggregator] UK (UKVI) feed failed:", ukResult.reason);
   }
 
+  if (germanyResult.status === "fulfilled") {
+    rssArticles.push(...germanyResult.value);
+  } else {
+    console.error("[RSS Aggregator] Germany feed failed:", germanyResult.reason);
+  }
+
+  if (netherlandsResult.status === "fulfilled") {
+    rssArticles.push(...netherlandsResult.value);
+  } else {
+    console.error("[RSS Aggregator] Netherlands feed failed:", netherlandsResult.reason);
+  }
+
+  if (franceResult.status === "fulfilled") {
+    rssArticles.push(...franceResult.value);
+  } else {
+    console.error("[RSS Aggregator] France feed failed:", franceResult.reason);
+  }
+
   // Merge RSS articles + mock data, deduplicating by slug.
-  // RSS articles go first so real news appears at the top of /news.
-  // Mock articles act as a fallback for all content not yet covered by RSS.
   const seenSlugs = new Set<string>();
   const merged: NewsArticle[] = [];
 
@@ -102,3 +149,4 @@ export async function getAllNews(): Promise<NewsArticle[]> {
 
   return merged;
 }
+
