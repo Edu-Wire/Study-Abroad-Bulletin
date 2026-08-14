@@ -16,6 +16,7 @@ import { DeadlineTrackerCard } from "@/components/cards/DeadlineTrackerCard";
 import { ConsultantCard } from "@/components/cards/ConsultantCard";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner, InlineAd } from "@/components/editorial/AdComponents";
+import { getCanadaNews, getUKNews } from "@/lib/rss";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -36,7 +37,7 @@ export function generateStaticParams() {
 }
 
 const countryImages: Record<string, string> = {
-  canada: "/images/news-canada.jpg",
+  canada: "/images/news-canada-hero.jpg",
   uk: "/images/news-uk.jpg",
   usa: "/images/news-library.jpg",
   australia: "/images/news-australia.jpg",
@@ -52,7 +53,17 @@ export default async function CountryDetailPage({ params }: Props) {
   if (!country) notFound();
 
   const countryUniversities = universities.filter((u) => u.country === country.name);
-  const countryNews = news.filter((n) => n.country === country.name);
+
+  // Canada and UK: use ONLY real RSS data (no mock fallback during this testing phase).
+  // All other countries: filter mock articles as before.
+  const rssCountries = ["canada", "uk"] as const;
+  const countryNews =
+    slug === "canada"
+      ? await getCanadaNews()
+      : slug === "uk"
+      ? await getUKNews()
+      : news.filter((n) => n.country === country.name);
+
   const countryScholarships = scholarships.filter((s) => s.country === country.name);
   const countryDeadlines = immigrationDeadlines.filter((d) => d.country === country.name);
   const countryConsultants = consultants.filter((c) => c.destinations.includes(country.name) || c.country === country.name);
@@ -249,21 +260,34 @@ export default async function CountryDetailPage({ params }: Props) {
           )}
 
           {/* Latest news */}
-          {countryNews.length > 0 && (
-            <div className="mt-12 border-t border-border pt-10">
-              <SectionHeading
-                eyebrow="Editorial"
-                title={`Latest from ${country.name}`}
-                action="All news"
-                actionHref="/news"
-              />
+          <div className="mt-12 border-t border-border pt-10">
+            <SectionHeading
+              eyebrow={rssCountries.includes(slug as typeof rssCountries[number]) ? "Live Government News" : "Editorial"}
+              title={`Latest from ${country.name}`}
+              action="All news"
+              actionHref="/news"
+            />
+            {countryNews.length > 0 ? (
               <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-                {countryNews.slice(0, 3).map((article) => (
+                {countryNews.slice(0, 6).map((article) => (
                   <NewsCard key={article.id} article={article} />
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="mt-8 rounded border border-border bg-surface px-6 py-10 text-center">
+                <p className="font-display text-lg font-bold text-foreground">
+                  {rssCountries.includes(slug as typeof rssCountries[number])
+                    ? "Live news feed is currently unavailable."
+                    : "No recent news for this destination."}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {rssCountries.includes(slug as typeof rssCountries[number])
+                    ? "The official government feed could not be reached. Please try again later."
+                    : "Check back soon for updates."}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </main>
       <Footer />

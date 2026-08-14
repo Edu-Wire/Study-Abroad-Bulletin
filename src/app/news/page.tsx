@@ -6,7 +6,7 @@ import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { NewsCard } from "@/components/cards/NewsCards";
 import { AdBanner } from "@/components/editorial/AdComponents";
-import { news } from "@/data/mock";
+import { getAllNews } from "@/lib/rss";
 
 export const metadata: Metadata = {
   title: "Study Abroad News — Universities, Scholarships, Visa & Admissions",
@@ -14,7 +14,8 @@ export const metadata: Metadata = {
     "Daily coverage of universities, scholarships, visa policy and admissions news for international students.",
 };
 
-export default function NewsPage() {
+export default async function NewsPage() {
+  const news = await getAllNews();
   const [featured, ...rest] = news;
 
   return (

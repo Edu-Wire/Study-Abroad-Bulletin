@@ -5,7 +5,7 @@ import { CountryFlag } from "@/components/common/CountryFlag";
 import { cn } from "@/lib/utils";
 
 const countryImages: Record<string, string> = {
-  canada: "/images/news-canada.jpg",
+  canada: "/images/news-canada-hero.jpg",
   uk: "/images/news-uk.jpg",
   usa: "/images/news-library.jpg",
   australia: "/images/news-australia.jpg",

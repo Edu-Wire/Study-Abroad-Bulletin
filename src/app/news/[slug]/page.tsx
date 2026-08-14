@@ -5,10 +5,10 @@ import Link from "next/link";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
-import { news } from "@/data/mock";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdSidebar, InlineAd } from "@/components/editorial/AdComponents";
 import { ArticleShare } from "@/components/common/ArticleShare";
+import { getAllNews } from "@/lib/rss";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -16,7 +16,8 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const article = news.find((a) => a.slug === slug);
+  const allNews = await getAllNews();
+  const article = allNews.find((a) => a.slug === slug);
   if (!article) return { title: "Article not found" };
   return {
     title: article.headline,
@@ -35,17 +36,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export function generateStaticParams() {
-  return news.map((article) => ({ slug: article.slug }));
-}
+// generateStaticParams is intentionally omitted.
+// This page is fully dynamic so that RSS articles arriving after deployment
+// are served without requiring a rebuild.
 
 export default async function ArticlePage({ params }: Props) {
   const { slug } = await params;
-  const article = news.find((a) => a.slug === slug);
+  const allNews = await getAllNews();
+  const article = allNews.find((a) => a.slug === slug);
   if (!article) notFound();
 
-  const related = news.filter((a) => a.slug !== slug).slice(0, 3);
-  const trending = news.slice(0, 5);
+  const related = allNews.filter((a) => a.slug !== slug).slice(0, 3);
+  const trending = allNews.slice(0, 5);
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
@@ -93,7 +95,7 @@ export default async function ArticlePage({ params }: Props) {
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <p className="eyebrow text-muted-foreground">
-                      By Editorial Team
+                      {article.isRss ? article.sourceName : "By Editorial Team"}
                     </p>
                     <span className="text-border">·</span>
                     <p className="eyebrow text-muted-foreground">{article.date}</p>
@@ -120,67 +122,97 @@ export default async function ArticlePage({ params }: Props) {
               </div>
 
               {/* Article body */}
-              <div className="article-prose mt-8">
-                <p>
-                  {article.summary} This represents the opening paragraph of the full
-                  editorial article, which would be populated from the CMS when integrated.
-                </p>
+              {article.isRss ? (
+                /* RSS article: show real summary + clear source attribution */
+                <div className="mt-8">
+                  <div className="article-prose">
+                    <p>{article.summary}</p>
+                  </div>
 
-                <p>
-                  The study-abroad landscape continues to evolve rapidly, with new policy
-                  changes, scholarship opportunities, and university updates emerging
-                  regularly across all major destinations. Students and education professionals
-                  are closely monitoring these developments to make informed decisions.
-                </p>
+                  {/* Source attribution block */}
+                  <div className="mt-8 border border-border bg-surface p-6">
+                    <p className="eyebrow text-muted-foreground mb-1">Original Source</p>
+                    <p className="font-semibold text-foreground">{article.sourceName}</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      This article is sourced from the official IRCC government feed.
+                      The summary above is provided by the original source.
+                      Read the full article on the official IRCC website.
+                    </p>
+                    {article.sourceUrl && (
+                      <a
+                        href={article.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-4 inline-flex items-center gap-2 border border-primary px-4 py-2 eyebrow text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                      >
+                        Read original source →
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Mock article: existing demo prose — unchanged */
+                <div className="article-prose mt-8">
+                  <p>
+                    {article.summary} This represents the opening paragraph of the full
+                    editorial article, which would be populated from the CMS when integrated.
+                  </p>
 
-                <h2>Key Developments</h2>
-                <p>
-                  International student numbers have continued to grow year-on-year, with
-                  demand concentrated in English-speaking destinations, Germany, and the
-                  Netherlands. Institutions are responding by expanding their international
-                  admission pathways.
-                </p>
+                  <p>
+                    The study-abroad landscape continues to evolve rapidly, with new policy
+                    changes, scholarship opportunities, and university updates emerging
+                    regularly across all major destinations. Students and education professionals
+                    are closely monitoring these developments to make informed decisions.
+                  </p>
 
-                <p>
-                  Policy makers and institutions alike are working to ensure that processes
-                  remain accessible for qualified applicants while maintaining academic
-                  standards and regulatory compliance.
-                </p>
+                  <h2>Key Developments</h2>
+                  <p>
+                    International student numbers have continued to grow year-on-year, with
+                    demand concentrated in English-speaking destinations, Germany, and the
+                    Netherlands. Institutions are responding by expanding their international
+                    admission pathways.
+                  </p>
 
-                {/* Pull quote */}
-                <blockquote className="pull-quote my-8">
-                  &ldquo;Students are encouraged to verify all information with official
-                  sources before making decisions regarding their international education
-                  journey.&rdquo;
-                </blockquote>
+                  <p>
+                    Policy makers and institutions alike are working to ensure that processes
+                    remain accessible for qualified applicants while maintaining academic
+                    standards and regulatory compliance.
+                  </p>
 
-                <p>
-                  For the most up-to-date information, applicants should consult the official
-                  portals of their target institutions and the relevant immigration
-                  authorities. Study Abroad Intelligence provides editorial coverage as an
-                  independent information resource.
-                </p>
+                  <blockquote className="pull-quote my-8">
+                    &ldquo;Students are encouraged to verify all information with official
+                    sources before making decisions regarding their international education
+                    journey.&rdquo;
+                  </blockquote>
 
-                <h2>What This Means for Students</h2>
-                <p>
-                  Students currently in the application process, or planning to apply for
-                  the upcoming intake, should review the updated requirements carefully.
-                  Preparation timelines may need to be adjusted based on these changes.
-                </p>
+                  <p>
+                    For the most up-to-date information, applicants should consult the official
+                    portals of their target institutions and the relevant immigration
+                    authorities. Study Abroad Intelligence provides editorial coverage as an
+                    independent information resource.
+                  </p>
 
-                <ul>
-                  <li>Review updated eligibility criteria for your target programme</li>
-                  <li>Check deadlines with official university admissions offices</li>
-                  <li>Ensure financial documentation is current and accurate</li>
-                  <li>Allow additional processing time where applicable</li>
-                </ul>
+                  <h2>What This Means for Students</h2>
+                  <p>
+                    Students currently in the application process, or planning to apply for
+                    the upcoming intake, should review the updated requirements carefully.
+                    Preparation timelines may need to be adjusted based on these changes.
+                  </p>
 
-                <p>
-                  Additional coverage of this story will be published as further details
-                  become available. This is demo content for editorial interface preview.
-                  Full articles will be populated when the CMS integration is complete.
-                </p>
-              </div>
+                  <ul>
+                    <li>Review updated eligibility criteria for your target programme</li>
+                    <li>Check deadlines with official university admissions offices</li>
+                    <li>Ensure financial documentation is current and accurate</li>
+                    <li>Allow additional processing time where applicable</li>
+                  </ul>
+
+                  <p>
+                    Additional coverage of this story will be published as further details
+                    become available. This is demo content for editorial interface preview.
+                    Full articles will be populated when the CMS integration is complete.
+                  </p>
+                </div>
+              )}
 
               {/* Inline ad */}
               <InlineAd slot="article-inline-01" />

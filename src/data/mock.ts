@@ -2,7 +2,7 @@
 
 export const images = {
   heroCampus: "/images/hero-campus.jpg",
-  newsCanada: "/images/news-canada.jpg",
+  newsCanada: "/images/news-canada-hero.jpg",
   newsUk: "/images/news-uk.jpg",
   newsScholarship: "/images/news-scholarship.jpg",
   newsVisa: "/images/news-visa.jpg",
@@ -30,6 +30,12 @@ export type NewsArticle = {
   readingTime: string;
   image: string;
   breaking?: boolean;
+  /** Set for articles sourced from an external RSS/Atom feed */
+  isRss?: boolean;
+  /** URL of the original article on the source website */
+  sourceUrl?: string;
+  /** Human-readable name of the news source */
+  sourceName?: string;
 };
 
 export type Country = {
