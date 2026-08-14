@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search, X } from "lucide-react";
-import { SearchBar } from "@/components/common/SearchBar";
+import { SearchWithDropdown } from "@/components/common/SearchWithDropdown";
 import { cn } from "@/lib/utils";
 
 const mainNav = [
@@ -175,7 +175,6 @@ function MobileDrawer({
   onClose: () => void;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -202,12 +201,9 @@ function MobileDrawer({
 
         {/* Search */}
         <div className="border-b border-border px-5 py-4">
-          <SearchBar
+          <SearchWithDropdown
             placeholder="Search…"
-            onSubmit={(q) => {
-              onClose();
-              if (q) router.push(`/search?q=${encodeURIComponent(q)}`);
-            }}
+            onClose={onClose}
           />
         </div>
 
@@ -372,13 +368,10 @@ export function Header() {
       {searchOpen && (
         <div className="border-b border-border bg-background">
           <div className="shell py-3">
-            <SearchBar
+            <SearchWithDropdown
               placeholder="Search universities, scholarships, news, countries…"
               autoFocus
-              onSubmit={(q) => {
-                setSearchOpen(false);
-                if (q) router.push(`/search?q=${encodeURIComponent(q)}`);
-              }}
+              onClose={() => setSearchOpen(false)}
             />
           </div>
         </div>
