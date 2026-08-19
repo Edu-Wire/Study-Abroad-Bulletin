@@ -6,7 +6,9 @@ import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { NewsCard } from "@/components/cards/NewsCards";
 import { AdBanner } from "@/components/editorial/AdComponents";
-import { getAllNews } from "@/lib/rss";
+import { getAllNews } from "@/lib/articles";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Study Abroad News — Universities, Scholarships, Visa & Admissions",

@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/site/Header";
-import { login as apiLogin } from "../../../../backend/auth";
+import { login as apiLogin } from "@/lib/api/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,12 +28,23 @@ export default function LoginPage() {
 
     try {
       const res = await apiLogin(formData);
-      if (res.success) {
+      if (res.success && res.token) {
         if (typeof window !== "undefined") {
           localStorage.setItem("authToken", res.token);
-          localStorage.setItem("authUser", JSON.stringify(res.user));
+          if (res.user) {
+            localStorage.setItem("authUser", JSON.stringify(res.user));
+            // Set cookie for Next.js server middleware
+            document.cookie = `auth_token=${res.token}; path=/; max-age=604800; SameSite=Lax`;
+            document.cookie = `auth_role=${res.user.role || "STUDENT"}; path=/; max-age=604800; SameSite=Lax`;
+          }
         }
-        router.push("/dashboard");
+
+        const role = res.user?.role;
+        if (role === "SUPER_ADMIN" || role === "ADMIN" || role === "EDITOR") {
+          router.push("/admin");
+        } else {
+          router.push("/dashboard");
+        }
       }
     } catch (err: any) {
       setError(err?.message || "Invalid email or password.");

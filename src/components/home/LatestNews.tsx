@@ -3,11 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { news } from "@/data/mock";
+import type { NewsArticle } from "@/data/mock";
 import { SectionHeading } from "@/components/common/SectionHeading";
 import { CountryFlag } from "@/components/common/CountryFlag";
 
-export function LatestNews() {
+interface LatestNewsProps {
+  articles: NewsArticle[];
+}
+
+export function LatestNews({ articles }: LatestNewsProps) {
+  const news = articles;
   const [activeCategory, setActiveCategory] = useState("All");
   const categories = ["All", "Visa", "Admissions", "Scholarships", "Universities", "Student Life", "Career"];
 

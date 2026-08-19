@@ -1,28 +1,28 @@
 /**
- * RSS Aggregator — central entry point for all RSS data.
+ * RSS Aggregator — central entry point for all RSS data (public re-export).
  *
- * The UI and page components import ONLY from this file.
- * They never import directly from ircc.ts, uk.ts, or any other
- * country-specific fetcher.
+ * As of Phase 2 (PostgreSQL integration), the primary merged feed is served
+ * by src/lib/articles.ts which combines PostgreSQL PUBLISHED articles with
+ * live RSS. This file now re-exports from articles.ts so all existing callers
+ * (news/page.tsx, news/[slug]/page.tsx) continue to work without change.
+ *
+ * Country-specific feeds (getCanadaNews, getUKNews) remain unchanged and are
+ * still used directly by /countries/[slug]/page.tsx for live government feeds.
  *
  * How to add a new country later:
  *   1. Add a source entry in src/data/rssSources.ts.
  *   2. Create src/lib/rss/<country>.ts following the uk.ts pattern.
- *   3. Import its function here and add it to the Promise.allSettled call
- *      inside getAllNews().
- *   4. Add a named export like getCanadaNews / getUKNews if the country
- *      page needs its own isolated feed.
+ *   3. Import and call it inside getPublishedArticles() in src/lib/articles.ts.
+ *   4. Add a named export here if the country page needs an isolated feed.
  *   Nothing else needs to change.
  *
  * Failure isolation:
- *   getAllNews() uses Promise.allSettled() so a single failed feed
- *   (network timeout, bad XML, etc.) never crashes or blocks the others.
- *   Each source fails independently and logs its own error.
+ *   getAllNews() in articles.ts uses Promise.allSettled() so a single failed
+ *   feed never crashes or blocks the others.
  */
 
 import { getIRCCNews } from "./ircc";
 import { getUKVINews } from "./uk";
-import { news as mockNews } from "@/data/mock";
 import type { NewsArticle } from "@/data/mock";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,57 +48,18 @@ export async function getUKNews(): Promise<NewsArticle[]> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Merged feed (used by /news and /news/[slug])
+// Merged feed — now powered by PostgreSQL + RSS via articles.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Fetches all enabled RSS feeds in parallel and merges the results with
- * the existing mock articles into a single NewsArticle[].
+ * Returns all public news: PostgreSQL PUBLISHED articles + live RSS feeds.
  *
- * Order: RSS articles appear first (newest government news at the top),
- * followed by mock articles for all other content.
- *
- * Deduplication: slug-based. If two sources ever produce the same slug
- * (very unlikely given the source prefixes), the first one wins.
- *
- * Fallback: if ALL RSS sources fail, the function still returns the full
- * mock dataset — the site never goes empty.
+ * Delegates to src/lib/articles.ts which is the single source of truth.
+ * DB articles appear first (newest published at top), then RSS articles.
+ * Deduplication is by slug; DB articles win over RSS duplicates.
  */
 export async function getAllNews(): Promise<NewsArticle[]> {
-  // Fetch all sources in parallel. allSettled means one failure does NOT
-  // reject the whole promise — we get a result (fulfilled or rejected) for each.
-  const [canadaResult, ukResult] = await Promise.allSettled([
-    getIRCCNews(),
-    getUKVINews(),
-  ]);
-
-  // Collect articles from whichever sources succeeded
-  const rssArticles: NewsArticle[] = [];
-
-  if (canadaResult.status === "fulfilled") {
-    rssArticles.push(...canadaResult.value);
-  } else {
-    console.error("[RSS Aggregator] Canada (IRCC) feed failed:", canadaResult.reason);
-  }
-
-  if (ukResult.status === "fulfilled") {
-    rssArticles.push(...ukResult.value);
-  } else {
-    console.error("[RSS Aggregator] UK (UKVI) feed failed:", ukResult.reason);
-  }
-
-  // Merge RSS articles + mock data, deduplicating by slug.
-  // RSS articles go first so real news appears at the top of /news.
-  // Mock articles act as a fallback for all content not yet covered by RSS.
-  const seenSlugs = new Set<string>();
-  const merged: NewsArticle[] = [];
-
-  for (const article of [...rssArticles, ...mockNews]) {
-    if (!seenSlugs.has(article.slug)) {
-      seenSlugs.add(article.slug);
-      merged.push(article);
-    }
-  }
-
-  return merged;
+  // Dynamic import to avoid circular dependency (articles.ts imports rss/ircc & rss/uk)
+  const { getAllNews: getAll } = await import("@/lib/articles");
+  return getAll();
 }

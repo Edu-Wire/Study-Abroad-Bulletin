@@ -18,7 +18,8 @@ import {
 import { LatestNews } from "@/components/home/LatestNews";
 import { FindYourUniversity } from "@/components/home/FindYourUniversity";
 import { AdBanner } from "@/components/editorial/AdComponents";
-  
+import { getAllNews, getBreakingArticle } from "@/lib/articles";
+
 export const metadata: Metadata = {
   title: "Study Abroad Intelligence — Universities, Scholarships & Visa News",
   description:
@@ -37,13 +38,23 @@ export const metadata: Metadata = {
   },
 };
 
-export default function HomePage() {
+// Force dynamic rendering so admin article changes appear immediately
+// without waiting for a Next.js rebuild or cache revalidation.
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  // Fetch once at the page level; pass as props to server components below.
+  const [articles, breakingArticle] = await Promise.all([
+    getAllNews(),
+    getBreakingArticle(),
+  ]);
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 overflow-x-clip">
       <Header />
       <main className="min-w-0">
-        {/* Breaking strip above hero */}
-        <BreakingStrip />
+        {/* Breaking strip above hero — powered by PostgreSQL */}
+        <BreakingStrip article={breakingArticle} />
 
         {/* Ad placement — homepage top */}
         <div className="border-b border-border bg-background">
@@ -52,11 +63,11 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Front page hero — newspaper style */}
-        <Hero />
+        {/* Front page hero — newspaper style, uses DB articles */}
+        <Hero articles={articles} />
 
-        {/* Today's Briefing */}
-        <TodaysBriefing />
+        {/* Today's Briefing — uses DB articles */}
+        <TodaysBriefing articles={articles} />
 
         {/* Ad between Briefing and Latest News */}
         <div className="border-b border-border bg-surface">
@@ -65,8 +76,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Latest News + sidebar */}
-        <LatestNews />
+        {/* Latest News + sidebar — uses DB articles */}
+        <LatestNews articles={articles} />
 
         {/* Explore Destinations */}
         <ExploreDestinations />

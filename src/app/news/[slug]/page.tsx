@@ -8,7 +8,10 @@ import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdSidebar, InlineAd } from "@/components/editorial/AdComponents";
 import { ArticleShare } from "@/components/common/ArticleShare";
-import { getAllNews } from "@/lib/rss";
+import { getArticleBySlug, getAllNews } from "@/lib/articles";
+
+// Force dynamic so slugs added via admin are immediately accessible
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -16,8 +19,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const allNews = await getAllNews();
-  const article = allNews.find((a) => a.slug === slug);
+  const article = await getArticleBySlug(slug);
   if (!article) return { title: "Article not found" };
   return {
     title: article.headline,
@@ -42,8 +44,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ArticlePage({ params }: Props) {
   const { slug } = await params;
-  const allNews = await getAllNews();
-  const article = allNews.find((a) => a.slug === slug);
+
+  // Fetch the article (PostgreSQL PUBLISHED has priority over RSS)
+  const [article, allNews] = await Promise.all([
+    getArticleBySlug(slug),
+    getAllNews(),
+  ]);
   if (!article) notFound();
 
   const related = allNews.filter((a) => a.slug !== slug).slice(0, 3);
