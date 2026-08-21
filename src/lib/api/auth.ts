@@ -1,7 +1,5 @@
 import axios from "axios";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+import { API_BASE_URL } from "@/lib/api/base-url";
 
 export interface AuthUser {
   id: string;

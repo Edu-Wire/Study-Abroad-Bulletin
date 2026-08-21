@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { ArticleShare } from "@/components/common/ArticleShare";
+import { API_BASE_URL } from "@/lib/api/base-url";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -232,10 +233,9 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
     reader.readAsDataURL(file);
   }
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/countries`)
+    fetch(`${API_BASE_URL}/countries`)
       .then((r) => r.json())
       .then((d) => {
         if (d.success && Array.isArray(d.countries)) {
@@ -243,7 +243,7 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
         }
       })
       .catch(console.error);
-  }, [API_BASE]);
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Link lock & Unsaved Changes Protection during Edit Mode
@@ -307,7 +307,7 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
     setSaving(true);
     try {
       const token = getAuthToken();
-      const res = await fetch(`${API_BASE}/api/admin/articles/${article.id}`, {
+      const res = await fetch(`${API_BASE_URL}/admin/articles/${article.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -346,7 +346,7 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
     try {
       const token = getAuthToken();
       // 1. Save all fields with status PUBLISHED
-      const resPut = await fetch(`${API_BASE}/api/admin/articles/${article.id}`, {
+      const resPut = await fetch(`${API_BASE_URL}/admin/articles/${article.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -373,7 +373,7 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
       }
 
       // 2. Status transition
-      const resPatch = await fetch(`${API_BASE}/api/admin/articles/${article.id}/status`, {
+      const resPatch = await fetch(`${API_BASE_URL}/admin/articles/${article.id}/status`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

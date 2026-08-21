@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "@/lib/api/base-url";
 import {
   Users,
   Shield,
@@ -73,7 +74,7 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:8000/api/admin/users");
+      const res = await fetch(`${API_BASE_URL}/admin/users`);
       const data = await res.json();
       if (data.success && data.users) {
         setUsers(data.users);
@@ -118,7 +119,7 @@ export default function AdminUsersPage() {
         payload.password = editForm.password.trim();
       }
 
-      const res = await fetch(`http://localhost:8000/api/admin/users/${editUser.id}`, {
+      const res = await fetch(`${API_BASE_URL}/admin/users/${editUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -152,7 +153,7 @@ export default function AdminUsersPage() {
     setIsDeleting(true);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/users/${deleteTarget.id}`, {
+      const res = await fetch(`${API_BASE_URL}/admin/users/${deleteTarget.id}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -175,7 +176,7 @@ export default function AdminUsersPage() {
     setInviteStatus(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/admin/users/invite", {
+      const res = await fetch(`${API_BASE_URL}/admin/users/invite`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(inviteForm),

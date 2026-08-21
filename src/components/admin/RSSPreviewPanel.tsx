@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
+import { API_BASE_URL } from "@/lib/api/base-url";
 import {
   Rss,
   RefreshCw,
@@ -152,7 +153,7 @@ function RssItemCard({
   const handleImport = async () => {
     setImportState({ status: "loading" });
     try {
-      const res = await fetch("http://localhost:8000/api/admin/articles/import-rss", {
+      const res = await fetch(`${API_BASE_URL}/admin/articles/import-rss`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -334,7 +335,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:8000/api/admin/rss/preview");
+      const res = await fetch(`${API_BASE_URL}/admin/rss/preview`);
       const data = await res.json();
       if (data.success) {
         setItems(data.items ?? []);
@@ -342,7 +343,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
         setError(data.message ?? "Failed to load RSS preview.");
       }
     } catch {
-      setError("Could not reach backend server. Is it running on port 8000?");
+      setError("Could not reach backend server.");
     } finally {
       setLoading(false);
     }

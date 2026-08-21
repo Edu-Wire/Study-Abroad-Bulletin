@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { API_BASE_URL } from "@/lib/api/base-url";
 import {
   Newspaper,
   Eye,
@@ -111,7 +112,7 @@ export default function AdminNewsPage() {
         if (activeStatus !== "ALL") params.set("status", activeStatus);
         if (search.trim()) params.set("search", search.trim());
 
-        const res = await fetch(`http://localhost:8000/api/admin/articles?${params}`);
+        const res = await fetch(`${API_BASE_URL}/admin/articles?${params}`);
         const data = await res.json();
         if (data.success) {
           setArticles(data.articles);
@@ -148,7 +149,7 @@ export default function AdminNewsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/articles/${deleteTarget.id}`, {
+      const res = await fetch(`${API_BASE_URL}/admin/articles/${deleteTarget.id}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -165,7 +166,7 @@ export default function AdminNewsPage() {
 
   const handleQuickStatus = async (article: Article, newStatus: ArticleStatus) => {
     try {
-      await fetch(`http://localhost:8000/api/admin/articles/${article.id}/status`, {
+      await fetch(`${API_BASE_URL}/admin/articles/${article.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),

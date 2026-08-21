@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { X, Loader2, CheckCircle2, AlertCircle, FileEdit, Globe } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api/base-url";
 
 type ArticleStatus = "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
 type ArticleCategory = "UNIVERSITIES" | "ADMISSIONS" | "SCHOLARSHIPS" | "VISA" | "STUDENT_LIFE" | "CAREER";
@@ -95,7 +96,7 @@ export function ArticleFormModal({
 
   // Fetch countries for dropdowns
   useEffect(() => {
-    fetch("http://localhost:8000/api/countries")
+    fetch(`${API_BASE_URL}/countries`)
       .then((r) => r.json())
       .then((d) => {
         if (d.success) setCountries(d.countries);
@@ -128,8 +129,8 @@ export function ArticleFormModal({
     try {
       const url =
         mode === "create"
-          ? "http://localhost:8000/api/admin/articles"
-          : `http://localhost:8000/api/admin/articles/${initialData?.id}`;
+          ? `${API_BASE_URL}/admin/articles`
+          : `${API_BASE_URL}/admin/articles/${initialData?.id}`;
 
       const res = await fetch(url, {
         method: mode === "create" ? "POST" : "PUT",
@@ -157,7 +158,7 @@ export function ArticleFormModal({
     } catch {
       setResult({
         success: false,
-        message: "Could not connect to backend server. Is it running on port 8000?",
+        message: "Could not connect to backend server.",
       });
     } finally {
       setSubmitting(false);
