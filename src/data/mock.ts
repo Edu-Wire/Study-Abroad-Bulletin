@@ -26,6 +26,7 @@ export type NewsArticle = {
   country: string;
   headline: string;
   summary: string;
+  content?: string | null;
   date: string;
   readingTime: string;
   image: string;

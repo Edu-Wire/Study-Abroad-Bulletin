@@ -9,7 +9,7 @@ import { SearchWithDropdown } from "@/components/common/SearchWithDropdown";
 import { cn } from "@/lib/utils";
 
 const mainNav = [
-  { label: "Latest", href: "/news" },
+  { label: "News", href: "/news" },
   { label: "Universities", href: "/universities" },
   { label: "Countries", href: "/countries" },
   { label: "Scholarships", href: "/scholarships" },

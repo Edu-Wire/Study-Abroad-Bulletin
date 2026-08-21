@@ -8,18 +8,20 @@ import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdSidebar, InlineAd } from "@/components/editorial/AdComponents";
 import { ArticleShare } from "@/components/common/ArticleShare";
-import { getArticleBySlug, getAllNews } from "@/lib/articles";
+import { getArticleBySlug, getArticleBySlugForAdmin, getAllNews } from "@/lib/articles";
+import AdminArticleLiveEditor from "@/components/editorial/AdminArticleLiveEditor";
 
 // Force dynamic so slugs added via admin are immediately accessible
 export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const article = await getArticleBySlug(slug);
+  const article = (await getArticleBySlug(slug)) || (await getArticleBySlugForAdmin(slug));
   if (!article) return { title: "Article not found" };
   return {
     title: article.headline,
@@ -28,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: article.headline,
       description: article.summary,
       type: "article",
-      images: [{ url: article.image }],
+      images: [{ url: article.image || "/images/news-library.jpg" }],
     },
     twitter: {
       card: "summary_large_image",
@@ -42,29 +44,73 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // This page is fully dynamic so that RSS articles arriving after deployment
 // are served without requiring a rebuild.
 
-export default async function ArticlePage({ params }: Props) {
+export default async function ArticlePage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const isAdminPreview = resolvedSearchParams.adminPreview === "true";
 
-  // Fetch the article (PostgreSQL PUBLISHED has priority over RSS)
-  const [article, allNews] = await Promise.all([
-    getArticleBySlug(slug),
-    getAllNews(),
-  ]);
+  let article: any = null;
+  let adminRaw: any = null;
+
+  if (isAdminPreview) {
+    adminRaw = await getArticleBySlugForAdmin(slug);
+    if (adminRaw) {
+      article = {
+        id: adminRaw.id,
+        slug: adminRaw.slug,
+        headline: adminRaw.headline,
+        summary: adminRaw.summary,
+        content: adminRaw.content,
+        category: adminRaw.category,
+        country: adminRaw.primaryCountry?.name ?? "Global",
+        date: (() => {
+          if (!adminRaw.publishedAt) return "Draft";
+          const d = new Date(adminRaw.publishedAt);
+          return isNaN(d.getTime())
+            ? "Draft"
+            : d.toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              });
+        })(),
+        readingTime: adminRaw.readingTime || "3 min read",
+        image: adminRaw.image || "/images/news-library.jpg",
+        breaking: adminRaw.breaking,
+        featured: adminRaw.featured,
+        isRss: adminRaw.isRss,
+        sourceUrl: adminRaw.sourceUrl ?? undefined,
+        sourceName: adminRaw.sourceName ?? undefined,
+        status: adminRaw.status,
+        primaryCountryId: adminRaw.primaryCountryId || null,
+        countryIds: adminRaw.countries?.map((c: any) => c.country?.id || c.countryId) || [],
+      };
+    }
+  }
+
+  if (!article) {
+    const pub = await getArticleBySlug(slug);
+    if (pub) {
+      article = pub;
+    }
+  }
+
   if (!article) notFound();
 
+  const allNews = await getAllNews();
   const related = allNews.filter((a) => a.slug !== slug).slice(0, 3);
   const trending = allNews.slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-background pb-16 lg:pb-0">
+    <div className={`min-h-screen bg-background pb-16 lg:pb-0 ${isAdminPreview ? "pt-10" : ""}`}>
       <Header />
       <main>
-        <div className="shell py-10 lg:py-14">
+        <div className="shell pt-3 pb-12 lg:pt-4 lg:pb-14">
           <div className="grid gap-0 lg:grid-cols-12">
             {/* Article body — 8 cols */}
             <article className="min-w-0 lg:col-span-8 lg:pr-12 lg:border-r lg:border-border">
               {/* Breadcrumb */}
-              <nav className="mb-6 flex items-center gap-2 eyebrow text-muted-foreground">
+              <nav className="mb-3 flex items-center gap-2 eyebrow text-muted-foreground">
                 <Link href="/" className="hover:text-primary transition-colors">Home</Link>
                 <span>·</span>
                 <Link href="/news" className="hover:text-primary transition-colors">News</Link>
@@ -72,152 +118,191 @@ export default async function ArticlePage({ params }: Props) {
                 <span className="text-foreground">{article.category}</span>
               </nav>
 
-              {/* Article header */}
-              <header>
-                <div className="flex flex-wrap items-center gap-2">
-                  {article.breaking && (
-                    <span className="eyebrow border border-primary/30 bg-primary-soft text-primary px-2 py-0.5">
-                      Breaking
-                    </span>
-                  )}
-                  <span className="eyebrow text-primary">{article.category}</span>
-                  <span className="text-border">·</span>
-                  <div className="flex items-center gap-1">
-                    {article.country !== "Global" && (
-                      <CountryFlag country={article.country} size="xs" />
-                    )}
-                    <span className="eyebrow text-muted-foreground">{article.country}</span>
-                  </div>
-                </div>
-
-                <h1 className="mt-4 font-display text-3xl leading-tight font-extrabold text-foreground sm:text-4xl lg:text-5xl lg:leading-[1.1]">
-                  {article.headline}
-                </h1>
-
-                <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-                  {article.summary}
-                </p>
-
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <p className="eyebrow text-muted-foreground">
-                      {article.isRss ? article.sourceName : "By Editorial Team"}
-                    </p>
-                    <span className="text-border">·</span>
-                    <p className="eyebrow text-muted-foreground">{article.date}</p>
-                    <span className="text-border">·</span>
-                    <p className="eyebrow text-muted-foreground">{article.readingTime}</p>
-                  </div>
-                  <ArticleShare title={article.headline} />
-                </div>
-              </header>
-
-              {/* Hero image */}
-              <div className="mt-8 overflow-hidden">
-                <Image
-                  src={article.image}
-                  alt={article.headline}
-                  width={1280}
-                  height={720}
-                  priority
-                  className="aspect-[16/9] w-full object-cover"
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Illustrative editorial image · Study Abroad Intelligence
-                </p>
-              </div>
-
-              {/* Article body */}
-              {article.isRss ? (
-                /* RSS article: show real summary + clear source attribution */
-                <div className="mt-8">
-                  <div className="article-prose">
-                    <p>{article.summary}</p>
-                  </div>
-
-                  {/* Source attribution block */}
-                  <div className="mt-8 border border-border bg-surface p-6">
-                    <p className="eyebrow text-muted-foreground mb-1">Original Source</p>
-                    <p className="font-semibold text-foreground">{article.sourceName}</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      This article is sourced from the official IRCC government feed.
-                      The summary above is provided by the original source.
-                      Read the full article on the official IRCC website.
-                    </p>
-                    {article.sourceUrl && (
-                      <a
-                        href={article.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-4 inline-flex items-center gap-2 border border-primary px-4 py-2 eyebrow text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
-                      >
-                        Read original source →
-                      </a>
-                    )}
-                  </div>
-                </div>
+              {isAdminPreview && adminRaw ? (
+                /* Admin In-Place Live Editor */
+                <AdminArticleLiveEditor article={article} />
               ) : (
-                /* Mock article: existing demo prose — unchanged */
-                <div className="article-prose mt-8">
-                  <p>
-                    {article.summary} This represents the opening paragraph of the full
-                    editorial article, which would be populated from the CMS when integrated.
-                  </p>
+                /* Public Article View */
+                <>
+                  {/* Article header */}
+                  <header>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {article.breaking && (
+                        <span className="eyebrow border border-primary/30 bg-primary-soft text-primary px-2 py-0.5">
+                          Breaking
+                        </span>
+                      )}
+                      <span className="eyebrow text-primary">{article.category}</span>
+                      <span className="text-border">·</span>
+                      <div className="flex items-center gap-1">
+                        {article.country !== "Global" && (
+                          <CountryFlag country={article.country} size="xs" />
+                        )}
+                        <span className="eyebrow text-muted-foreground">{article.country}</span>
+                      </div>
+                    </div>
 
-                  <p>
-                    The study-abroad landscape continues to evolve rapidly, with new policy
-                    changes, scholarship opportunities, and university updates emerging
-                    regularly across all major destinations. Students and education professionals
-                    are closely monitoring these developments to make informed decisions.
-                  </p>
+                    <h1 className="mt-4 font-display text-3xl leading-tight font-extrabold text-foreground sm:text-4xl lg:text-5xl lg:leading-[1.1]">
+                      {article.headline}
+                    </h1>
 
-                  <h2>Key Developments</h2>
-                  <p>
-                    International student numbers have continued to grow year-on-year, with
-                    demand concentrated in English-speaking destinations, Germany, and the
-                    Netherlands. Institutions are responding by expanding their international
-                    admission pathways.
-                  </p>
+                    <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
+                      {article.summary}
+                    </p>
 
-                  <p>
-                    Policy makers and institutions alike are working to ensure that processes
-                    remain accessible for qualified applicants while maintaining academic
-                    standards and regulatory compliance.
-                  </p>
+                    <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <p className="eyebrow text-muted-foreground">
+                          {article.isRss ? article.sourceName : "By Editorial Team"}
+                        </p>
+                        <span className="text-border">·</span>
+                        <p className="eyebrow text-muted-foreground">{article.date}</p>
+                        <span className="text-border">·</span>
+                        <p className="eyebrow text-muted-foreground">{article.readingTime}</p>
+                      </div>
+                      <ArticleShare title={article.headline} />
+                    </div>
+                  </header>
 
-                  <blockquote className="pull-quote my-8">
-                    &ldquo;Students are encouraged to verify all information with official
-                    sources before making decisions regarding their international education
-                    journey.&rdquo;
-                  </blockquote>
+                  {/* Hero image */}
+                  <div className="mt-8 overflow-hidden">
+                    <Image
+                      src={article.image || "/images/news-library.jpg"}
+                      alt={article.headline}
+                      width={1280}
+                      height={720}
+                      priority
+                      unoptimized={Boolean(article.image && (article.image.startsWith("data:") || article.image.startsWith("blob:")))}
+                      className="aspect-[16/9] w-full object-cover"
+                    />
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Illustrative editorial image · Study Abroad Intelligence
+                    </p>
+                  </div>
 
-                  <p>
-                    For the most up-to-date information, applicants should consult the official
-                    portals of their target institutions and the relevant immigration
-                    authorities. Study Abroad Intelligence provides editorial coverage as an
-                    independent information resource.
-                  </p>
+                  {/* Article body */}
+                  {article.content ? (
+                    /* Real content stored in DB */
+                    <div className="article-prose mt-8 space-y-5">
+                      {article.content
+                        .replace(/<\/?(p|div|br)[^>]*>/gi, "\n")
+                        .replace(/<[^>]+>/g, "")
+                        .split(/\n{2,}/)
+                        .map((p: string) => p.trim())
+                        .filter(Boolean)
+                        .map((paragraph: string, idx: number) => (
+                          <p key={idx}>{paragraph}</p>
+                        ))}
 
-                  <h2>What This Means for Students</h2>
-                  <p>
-                    Students currently in the application process, or planning to apply for
-                    the upcoming intake, should review the updated requirements carefully.
-                    Preparation timelines may need to be adjusted based on these changes.
-                  </p>
+                      {article.isRss && (
+                        <div className="mt-8 border border-border bg-surface p-6">
+                          <p className="eyebrow text-muted-foreground mb-1">Original Source</p>
+                          <p className="font-semibold text-foreground">{article.sourceName || "RSS Feed"}</p>
+                          {article.sourceUrl && (
+                            <a
+                              href={article.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-4 inline-flex items-center gap-2 border border-primary px-4 py-2 eyebrow text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                            >
+                              Read original source →
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : article.isRss ? (
+                    /* RSS article: show real summary + clear source attribution */
+                    <div className="mt-8">
+                      <div className="article-prose">
+                        <p>{article.summary}</p>
+                      </div>
 
-                  <ul>
-                    <li>Review updated eligibility criteria for your target programme</li>
-                    <li>Check deadlines with official university admissions offices</li>
-                    <li>Ensure financial documentation is current and accurate</li>
-                    <li>Allow additional processing time where applicable</li>
-                  </ul>
+                      {/* Source attribution block */}
+                      <div className="mt-8 border border-border bg-surface p-6">
+                        <p className="eyebrow text-muted-foreground mb-1">Original Source</p>
+                        <p className="font-semibold text-foreground">{article.sourceName}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          This article is sourced from the official IRCC government feed.
+                          The summary above is provided by the original source.
+                          Read the full article on the official IRCC website.
+                        </p>
+                        {article.sourceUrl && (
+                          <a
+                            href={article.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-4 inline-flex items-center gap-2 border border-primary px-4 py-2 eyebrow text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                          >
+                            Read original source →
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Mock article: existing demo prose — unchanged */
+                    <div className="article-prose mt-8">
+                      <p>
+                        {article.summary} This represents the opening paragraph of the full
+                        editorial article, which would be populated from the CMS when integrated.
+                      </p>
 
-                  <p>
-                    Additional coverage of this story will be published as further details
-                    become available. This is demo content for editorial interface preview.
-                    Full articles will be populated when the CMS integration is complete.
-                  </p>
-                </div>
+                      <p>
+                        The study-abroad landscape continues to evolve rapidly, with new policy
+                        changes, scholarship opportunities, and university updates emerging
+                        regularly across all major destinations. Students and education professionals
+                        are closely monitoring these developments to make informed decisions.
+                      </p>
+
+                      <h2>Key Developments</h2>
+                      <p>
+                        International student numbers have continued to grow year-on-year, with
+                        demand concentrated in English-speaking destinations, Germany, and the
+                        Netherlands. Institutions are responding by expanding their international
+                        admission pathways.
+                      </p>
+
+                      <p>
+                        Policy makers and institutions alike are working to ensure that processes
+                        remain accessible for qualified applicants while maintaining academic
+                        standards and regulatory compliance.
+                      </p>
+
+                      <blockquote className="pull-quote my-8">
+                        &ldquo;Students are encouraged to verify all information with official
+                        sources before making decisions regarding their international education
+                        journey.&rdquo;
+                      </blockquote>
+
+                      <p>
+                        For the most up-to-date information, applicants should consult the official
+                        portals of their target institutions and the relevant immigration
+                        authorities. Study Abroad Intelligence provides editorial coverage as an
+                        independent information resource.
+                      </p>
+
+                      <h2>What This Means for Students</h2>
+                      <p>
+                        Students currently in the application process, or planning to apply for
+                        the upcoming intake, should review the updated requirements carefully.
+                        Preparation timelines may need to be adjusted based on these changes.
+                      </p>
+
+                      <ul>
+                        <li>Review updated eligibility criteria for your target programme</li>
+                        <li>Check deadlines with official university admissions offices</li>
+                        <li>Ensure financial documentation is current and accurate</li>
+                        <li>Allow additional processing time where applicable</li>
+                      </ul>
+
+                      <p>
+                        Additional coverage of this story will be published as further details
+                        become available. This is demo content for editorial interface preview.
+                        Full articles will be populated when the CMS integration is complete.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Inline ad */}
@@ -239,7 +324,7 @@ export default async function ArticlePage({ params }: Props) {
               </div>
 
               {/* Related stories */}
-              <div className="mt-12 border-t border-border pt-8">
+              <div id="related-stories-section" className="mt-12 border-t border-border pt-8">
                 <div className="section-rule mb-3" />
                 <div className="mt-3">
                   <h2 className="font-display text-2xl font-extrabold text-foreground">Related Stories</h2>

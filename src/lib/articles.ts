@@ -20,8 +20,6 @@
  */
 
 import prisma from "@/lib/prisma";
-import { getIRCCNews } from "@/lib/rss/ircc";
-import { getUKVINews } from "@/lib/rss/uk";
 import type { NewsArticle, NewsCategory } from "@/data/mock";
 
 // ---------------------------------------------------------------------------
@@ -92,6 +90,7 @@ function mapArticleToNewsArticle(
     slug:        article.slug,
     headline:    article.headline,
     summary:     article.summary,
+    content:     article.content,
     category:    CATEGORY_MAP[cat] ?? "Universities",
     country:     article.primaryCountry?.name ?? "Global",
     date:        formatPublishedDate(article.publishedAt),
@@ -139,47 +138,11 @@ export async function getPublishedArticles(): Promise<NewsArticle[]> {
 }
 
 /**
- * Returns all public news: PostgreSQL PUBLISHED articles merged with live RSS.
- * This is the primary function used by /news, /news/[slug], and the homepage.
- *
- * Order: DB articles (newest first) appear before RSS articles.
- * Deduplication: by slug — DB article always wins over an RSS article with the same slug.
+ * Returns all public news: strictly PostgreSQL PUBLISHED articles (editorial + admin-approved RSS imports).
+ * Un-imported raw RSS feeds remain in the Admin Panel and are never displayed publicly without admin approval.
  */
 export async function getAllNews(): Promise<NewsArticle[]> {
-  // Fetch DB and RSS in parallel
-  const [dbArticles, canadaResult, ukResult] = await Promise.allSettled([
-    getPublishedArticles(),
-    getIRCCNews(),
-    getUKVINews(),
-  ]);
-
-  const db: NewsArticle[] =
-    dbArticles.status === "fulfilled" ? dbArticles.value : [];
-
-  const rss: NewsArticle[] = [];
-  if (canadaResult.status === "fulfilled") {
-    rss.push(...canadaResult.value);
-  } else {
-    console.error("[articles.ts] Canada RSS feed failed:", canadaResult.reason);
-  }
-  if (ukResult.status === "fulfilled") {
-    rss.push(...ukResult.value);
-  } else {
-    console.error("[articles.ts] UK RSS feed failed:", ukResult.reason);
-  }
-
-  // Merge: DB first (higher priority), then RSS, deduplicate by slug
-  const seen = new Set<string>();
-  const merged: NewsArticle[] = [];
-
-  for (const article of [...db, ...rss]) {
-    if (!seen.has(article.slug)) {
-      seen.add(article.slug);
-      merged.push(article);
-    }
-  }
-
-  return merged;
+  return getPublishedArticles();
 }
 
 /**
@@ -223,7 +186,6 @@ export async function getBreakingArticle(): Promise<NewsArticle | null> {
  * Returns null if the article is not found in either source.
  */
 export async function getArticleBySlug(slug: string): Promise<NewsArticle | null> {
-  // 1. Try PostgreSQL first
   try {
     const row = await prisma.article.findFirst({
       where: {
@@ -235,20 +197,63 @@ export async function getArticleBySlug(slug: string): Promise<NewsArticle | null
       },
     });
 
-    if (row) return mapArticleToNewsArticle(row);
+    if (!row) return null;
+    return mapArticleToNewsArticle(row);
   } catch (error) {
     console.error(
       `[articles.ts] ❌ PostgreSQL lookup failed for slug "${slug}":`,
       error
     );
-    // Fall through to RSS check
+    return null;
   }
+}
 
-  // 2. Try RSS articles
+// ---------------------------------------------------------------------------
+// Admin preview fetcher — returns any status article with full raw fields
+// ---------------------------------------------------------------------------
+
+export interface AdminArticleRaw {
+  id: string;
+  slug: string;
+  headline: string;
+  summary: string;
+  content: string | null;
+  category: string;
+  image: string | null;
+  readingTime: string;
+  breaking: boolean;
+  featured: boolean;
+  isRss: boolean;
+  status: string;
+  sourceUrl: string | null;
+  sourceName: string | null;
+  publishedAt: Date;
+  primaryCountryId: string | null;
+  primaryCountry: { id: string; name: string; flag: string } | null;
+  countries: { country: { id: string; name: string; flag: string } }[];
+}
+
+/**
+ * Admin-only fetcher: returns a full article record for any status (DRAFT, PUBLISHED,
+ * ARCHIVED, PENDING_REVIEW, REJECTED). Used by the Live Editor preview page so editors
+ * can view and edit articles before they are published.
+ */
+export async function getArticleBySlugForAdmin(slug: string): Promise<AdminArticleRaw | null> {
   try {
-    const allRss = await getAllNews();
-    return allRss.find((a) => a.slug === slug) ?? null;
-  } catch {
+    const row = await prisma.article.findFirst({
+      where: { slug },
+      include: {
+        primaryCountry: true,
+        countries: { include: { country: true } },
+      },
+    });
+    if (!row) return null;
+    return row as AdminArticleRaw;
+  } catch (error) {
+    console.error(
+      `[articles.ts] ❌ Admin lookup failed for slug "${slug}":`,
+      error
+    );
     return null;
   }
 }

@@ -77,14 +77,10 @@ export default async function CountryDetailPage({ params }: Props) {
     ielts: u.ielts,
   }));
 
-  // Canada and UK: use live RSS government feeds
-  // All other countries: use PostgreSQL published articles filtered by country name
-  const countryNews =
-    slug === "canada"
-      ? await getCanadaNews()
-      : slug === "uk"
-        ? await getUKNews()
-        : (await getPublishedArticles()).filter((n) => n.country === country.name);
+  // Strictly use PostgreSQL published articles for all countries (editorial + approved RSS imports)
+  const countryNews = (await getPublishedArticles()).filter(
+    (n) => n.country.toLowerCase() === country.name.toLowerCase()
+  );
 
   const countryScholarships = country.scholarships.map((s) => ({
     id: s.scholarship.slug,

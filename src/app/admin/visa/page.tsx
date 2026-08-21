@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { FileCheck2, Eye, Edit3, Trash2, AlertCircle } from "lucide-react";
+import { FileCheck2, Eye, Edit3, Trash2, X, Sparkles } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer, AdminEmptyState } from "@/components/admin/AdminTable";
+import { StatusBadge } from "@/components/admin/StatusBadge";
 import { visaUpdates } from "@/data/mock";
 
 export default function AdminVisaPage() {
@@ -22,7 +23,7 @@ export default function AdminVisaPage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Visa & Immigration Updates"
-        description="Publish and maintain official immigration alerts, permit rules, financial proof changes, and urgent visa notices."
+        description="Publish official immigration policy alerts, financial proof changes, permit regulation updates, and urgent visa notices."
         count={visaUpdates.length}
         countLabel="updates"
         addLabel="Add Visa Alert"
@@ -30,12 +31,11 @@ export default function AdminVisaPage() {
       />
 
       <AdminTableContainer
-        title="Live Visa Policies & Bulletins"
         count={filteredUpdates.length}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search visa type, country, headline..."
-        footerNote={`Displaying ${filteredUpdates.length} of ${visaUpdates.length} immigration updates`}
+        searchPlaceholder="Search visa subclass, country, policy..."
+        footerNote={`Displaying ${filteredUpdates.length} of ${visaUpdates.length} immigration notices`}
       >
         {filteredUpdates.length === 0 ? (
           <AdminEmptyState
@@ -46,8 +46,8 @@ export default function AdminVisaPage() {
         ) : (
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-[#F7F9FC] border-b border-[#E4E8EF] text-[#667085] font-semibold uppercase tracking-wider">
-                <th className="py-3 px-4">Destination & Flag</th>
+              <tr className="bg-slate-50/75 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                <th className="py-3 px-4">Destination</th>
                 <th className="py-3 px-3">Visa Subclass / Type</th>
                 <th className="py-3 px-4">Policy Headline</th>
                 <th className="py-3 px-3">Announced Date</th>
@@ -55,13 +55,13 @@ export default function AdminVisaPage() {
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E4E8EF]">
+            <tbody className="divide-y divide-slate-100">
               {filteredUpdates.map((v) => (
                 <tr
                   key={v.id}
-                  className="hover:bg-[#F7F9FC]/60 transition-colors group"
+                  className="hover:bg-slate-50/70 transition-colors group"
                 >
-                  <td className="py-3.5 px-4 font-semibold text-[#111827] whitespace-nowrap">
+                  <td className="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className="text-lg" role="img" aria-label={v.country}>
                         {v.flag}
@@ -70,50 +70,45 @@ export default function AdminVisaPage() {
                     </div>
                   </td>
                   <td className="py-3.5 px-3 whitespace-nowrap">
-                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#1769E0]/10 text-[#1769E0]">
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-[#1769E0] border border-blue-200/80">
                       {v.visaType}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 font-semibold text-[#111827] max-w-sm">
+                  <td className="py-3.5 px-4 font-semibold text-slate-900 max-w-sm">
                     <div className="line-clamp-2 group-hover:text-[#1769E0] transition-colors">
                       {v.headline}
                     </div>
                   </td>
-                  <td className="py-3.5 px-3 text-[#667085] whitespace-nowrap">
+                  <td className="py-3.5 px-3 text-slate-500 whitespace-nowrap text-[11px]">
                     {v.date}
                   </td>
                   <td className="py-3.5 px-3 whitespace-nowrap">
-                    {v.urgent ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                        <AlertCircle className="h-3 w-3" />
-                        Urgent Policy
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-700">
-                        Standard Notice
-                      </span>
-                    )}
+                    <StatusBadge
+                      status={v.urgent ? "URGENT" : "STANDARD"}
+                      label={v.urgent ? "Urgent Policy" : "Standard Notice"}
+                      size="sm"
+                    />
                   </td>
                   <td className="py-3.5 px-4 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1">
                       <Link
                         href="/visa"
                         target="_blank"
-                        className="p-1.5 text-[#667085] hover:text-[#1769E0] hover:bg-[#1769E0]/10 rounded transition-colors"
-                        title="View Public Page"
+                        className="p-1.5 text-slate-500 hover:text-[#1769E0] hover:bg-blue-50 rounded-lg transition-colors"
+                        title="View Public Notice"
                       >
                         <Eye className="h-3.5 w-3.5" />
                       </Link>
                       <button
-                        onClick={() => setActionNotice(`Edit: ${v.headline}`)}
-                        className="p-1.5 text-[#667085] hover:text-[#1769E0] hover:bg-[#1769E0]/10 rounded transition-colors cursor-pointer"
+                        onClick={() => setActionNotice(`Edit Notice: ${v.headline}`)}
+                        className="p-1.5 text-slate-500 hover:text-[#1769E0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                         title="Edit Policy"
                       >
                         <Edit3 className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        onClick={() => setActionNotice(`Delete: ${v.headline}`)}
-                        className="p-1.5 text-[#667085] hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                        onClick={() => setActionNotice(`Delete Notice: ${v.headline}`)}
+                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                         title="Delete Policy"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -130,28 +125,33 @@ export default function AdminVisaPage() {
       {/* Action Notice Modal */}
       {actionNotice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#071A33]/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-[#E4E8EF] p-6 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-[#1769E0]/10 text-[#1769E0] flex items-center justify-center shrink-0 font-bold">
-                +
+          <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 text-[#1769E0] border border-blue-100 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">{actionNotice}</h3>
+                  <p className="text-xs text-slate-500">Immigration Alert System</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-[#111827]">{actionNotice}</h3>
-                <p className="text-xs text-[#667085]">Visa Action Triggered</p>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3.5 bg-[#F7F9FC] border border-[#E4E8EF] rounded-lg text-sm text-[#4B5563] leading-relaxed">
-              <p className="font-semibold text-[#111827] mb-1">
-                Phase 1 Admin Panel Foundation
-              </p>
-              Visa alert creation and real-time push will be connected in Phase 2 backend.
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setActionNotice(null)}
-                className="px-4 py-2 text-sm font-medium text-white bg-[#1769E0] hover:bg-[#1357bd] rounded-lg transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 leading-relaxed">
+              Visa policy alerts are distributed to student feeds and country intelligence pages.
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => setActionNotice(null)}
+                className="px-4 py-2 text-xs font-semibold text-white bg-[#1769E0] hover:bg-[#1357bd] rounded-lg transition-colors cursor-pointer shadow-2xs"
               >
                 Close
               </button>

@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { XMLParser } from "fast-xml-parser";
 import { connectDB } from "./config/db.js";
 import { prisma } from "./config/prisma.js";
 
@@ -299,6 +300,83 @@ app.post("/api/admin/users/invite", async (req, res) => {
   }
 });
 
+/**
+ * @route   PATCH /api/admin/users/:id
+ * @desc    Update user profile, role, status, and/or reset password with Bcrypt hashing
+ */
+app.patch("/api/admin/users/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, role, status, password } = req.body;
+
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    const updateData = {};
+    if (firstName !== undefined && firstName.trim()) updateData.firstName = firstName.trim();
+    if (lastName !== undefined && lastName.trim()) updateData.lastName = lastName.trim();
+    if (role !== undefined) updateData.role = role;
+    if (status !== undefined) updateData.status = status;
+
+    // Safely hash password with bcrypt if provided
+    if (password && password.trim()) {
+      const salt = await bcrypt.genSalt(10);
+      updateData.password = await bcrypt.hash(password.trim(), salt);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        status: true,
+        lastLogin: true,
+        createdAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `User ${updatedUser.email} updated successfully.`,
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Update user error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update user." });
+  }
+});
+
+/**
+ * @route   DELETE /api/admin/users/:id
+ * @desc    Delete a user account from PostgreSQL
+ */
+app.delete("/api/admin/users/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    return res.status(200).json({
+      success: true,
+      message: `User ${existingUser.email} deleted successfully.`,
+    });
+  } catch (error) {
+    console.error("Delete user error:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete user." });
+  }
+});
+
 // ============================================================
 // COUNTRIES LIST (for admin form dropdowns)
 // ============================================================
@@ -569,7 +647,344 @@ app.delete("/api/admin/articles/:id", async (req, res) => {
   }
 });
 
+// ============================================================
+// RSS UTILITIES (mirrors src/lib/rss/parser.ts — same library, same settings)
+// Used only by the two admin RSS routes below.
+// ============================================================
+
+/** Same parser settings as src/lib/rss/parser.ts */
+function createAtomParser() {
+  return new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    textNodeName: "#text",
+    isArray: (name) => name === "entry",
+  });
+}
+
+/** Fetch a URL and return raw Atom <entry> objects. Returns [] on any failure. */
+async function fetchAtomEntriesRaw(url, logTag) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error(`[${logTag}] HTTP ${res.status}`);
+      return [];
+    }
+    const xml = await res.text();
+    const parser = createAtomParser();
+    const parsed = parser.parse(xml);
+    return parsed?.feed?.entry ?? [];
+  } catch (err) {
+    console.error(`[${logTag}] Fetch/parse error:`, err.message);
+    return [];
+  }
+}
+
+/** Extract href from Atom <link> field (handles string | object | array). */
+function extractLink(linkField) {
+  if (!linkField) return "";
+  if (typeof linkField === "string") return linkField;
+  if (Array.isArray(linkField)) {
+    const alt = linkField.find((l) => l?.["@_rel"] === "alternate" || !l?.["@_rel"]);
+    return alt?.["@_href"] ?? "";
+  }
+  return linkField?.["@_href"] ?? "";
+}
+
+/** Extract plain text from an Atom field (handles string | { "#text": "…" }). */
+function extractText(field) {
+  if (!field) return "";
+  if (typeof field === "string") return field;
+  if (typeof field === "object" && "#text" in field) return String(field["#text"] ?? "");
+  return "";
+}
+
+/** title → URL-safe slug with source prefix. */
+function toSlugRss(title, prefix) {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 80);
+  return `${prefix}-${base}`;
+}
+
+/** Normalize one raw Atom entry for a given RSSSource DB record. Returns null if unusable. */
+function normalizeRssEntry(entry, source) {
+  try {
+    const headline = extractText(entry?.title);
+    if (!headline.trim()) return null;
+
+    const rawSummary = extractText(entry?.summary) || extractText(entry?.content) || "";
+    const summary = rawSummary.replace(/<[^>]+>/g, "").trim() || "No summary available.";
+
+    // IRCC uses <published>; UKVI uses <updated>
+    const rawDate = entry?.published ?? entry?.updated ?? "";
+    const sourceUrl = extractLink(entry?.link);
+    if (!sourceUrl) return null; // sourceUrl is our duplicate key — must exist
+
+    const slug = toSlugRss(headline, source.slugPrefix);
+
+    return {
+      slug,
+      headline,
+      summary,
+      sourceUrl,
+      rawDate,
+      image: source.fallbackImage,
+      sourceName: source.name,
+      rssSourceId: source.id,
+      countryId: source.countryId,
+      category: source.category,
+      slugPrefix: source.slugPrefix,
+    };
+  } catch (err) {
+    console.error(`[RSS normalize] Error:`, err.message);
+    return null;
+  }
+}
+
+// ============================================================
+// ADMIN RSS ROUTES
+// ============================================================
+
+/**
+ * @route   GET /api/admin/rss/preview
+ * @desc    Fetch live RSS items from all enabled sources and annotate
+ *          each with whether it has already been imported into the DB.
+ */
+app.get("/api/admin/rss/preview", async (req, res) => {
+  try {
+    // Load all enabled RSSSource records from DB
+    const dbSources = await prisma.rSSSource.findMany({
+      where: { enabled: true },
+    });
+
+    if (dbSources.length === 0) {
+      return res.status(200).json({ success: true, items: [] });
+    }
+
+    // Fetch all feeds in parallel
+    const feedResults = await Promise.allSettled(
+      dbSources.map(async (source) => {
+        const entries = await fetchAtomEntriesRaw(source.feedUrl, `RSS Preview ${source.id}`);
+        const items = [];
+        const seenUrls = new Set();
+
+        for (const entry of entries) {
+          const normalized = normalizeRssEntry(entry, source);
+          if (!normalized || seenUrls.has(normalized.sourceUrl)) continue;
+          seenUrls.add(normalized.sourceUrl);
+          items.push(normalized);
+        }
+
+        return items;
+      })
+    );
+
+    // Flatten all items
+    const allItems = [];
+    for (const result of feedResults) {
+      if (result.status === "fulfilled") allItems.push(...result.value);
+    }
+
+    // Sort newest to oldest by publication date
+    allItems.sort((a, b) => {
+      const timeA = new Date(a.rawDate || 0).getTime();
+      const timeB = new Date(b.rawDate || 0).getTime();
+      return timeB - timeA;
+    });
+
+    // Batch check which sourceUrls already exist in DB
+    const allSourceUrls = allItems.map((i) => i.sourceUrl).filter(Boolean);
+    const existingArticles = await prisma.article.findMany({
+      where: { sourceUrl: { in: allSourceUrls } },
+      select: { id: true, sourceUrl: true, status: true, slug: true },
+    });
+
+    const importedMap = new Map(existingArticles.map((a) => [a.sourceUrl, a]));
+
+    // Annotate each item
+    const annotated = allItems.map((item) => {
+      const existing = importedMap.get(item.sourceUrl);
+      return {
+        ...item,
+        alreadyImported: !!existing,
+        existingArticleId: existing?.id ?? null,
+        existingStatus: existing?.status ?? null,
+        existingSlug: existing?.slug ?? null,
+      };
+    });
+
+    return res.status(200).json({ success: true, items: annotated, total: annotated.length });
+  } catch (error) {
+    console.error("RSS preview error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load RSS preview." });
+  }
+});
+
+/**
+ * @route   POST /api/admin/articles/import-rss
+ * @desc    Import a single RSS item into the database as a DRAFT article.
+ *
+ * The client sends only identifiers (rssSourceId + sourceUrl).
+ * The server re-fetches the live feed, finds the matching entry,
+ * normalizes it, checks for duplicates, then creates the Article + ArticleCountry
+ * in a single Prisma transaction.
+ */
+app.post("/api/admin/articles/import-rss", async (req, res) => {
+  try {
+    const { rssSourceId, sourceUrl: clientSourceUrl } = req.body;
+
+    // ── 1. Validate inputs ──────────────────────────────────────────────────
+    if (!rssSourceId || typeof rssSourceId !== "string") {
+      return res.status(400).json({ success: false, message: "rssSourceId is required." });
+    }
+    if (!clientSourceUrl || typeof clientSourceUrl !== "string") {
+      return res.status(400).json({ success: false, message: "sourceUrl is required." });
+    }
+
+    // ── 2. Validate RSSSource from DB (do NOT trust arbitrary source data) ──
+    const dbSource = await prisma.rSSSource.findUnique({ where: { id: rssSourceId } });
+    if (!dbSource) {
+      return res.status(404).json({ success: false, message: `Unknown RSS source: ${rssSourceId}` });
+    }
+    if (!dbSource.enabled) {
+      return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" is disabled.` });
+    }
+    if (!dbSource.feedUrl) {
+      return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" has no feed URL.` });
+    }
+    if (!dbSource.countryId) {
+      return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" has no country mapping.` });
+    }
+
+    // ── 3. Re-fetch the live feed server-side ───────────────────────────────
+    const entries = await fetchAtomEntriesRaw(dbSource.feedUrl, `Import ${rssSourceId}`);
+    if (entries.length === 0) {
+      return res.status(502).json({ success: false, message: "RSS feed is currently unavailable or empty." });
+    }
+
+    // ── 4. Find the matching entry by sourceUrl ─────────────────────────────
+    let matchedEntry = null;
+    for (const entry of entries) {
+      const url = extractLink(entry?.link);
+      if (url === clientSourceUrl) {
+        matchedEntry = entry;
+        break;
+      }
+    }
+
+    if (!matchedEntry) {
+      // Item may have dropped off the feed window; fall back to client-provided data
+      // but re-validate the sourceUrl domain matches the known feed domain
+      const feedDomain = new URL(dbSource.feedUrl).hostname;
+      let clientDomain;
+      try { clientDomain = new URL(clientSourceUrl).hostname; } catch {
+        return res.status(400).json({ success: false, message: "Invalid sourceUrl provided." });
+      }
+      if (!clientDomain.includes(feedDomain.split(".").slice(-2).join("."))) {
+        return res.status(400).json({
+          success: false,
+          message: "The provided sourceUrl does not match the expected feed domain.",
+        });
+      }
+      // Entry has aged off feed — cannot re-validate; refuse
+      return res.status(404).json({
+        success: false,
+        message: "This RSS item is no longer available in the feed. It may have aged off. Please refresh the RSS preview.",
+      });
+    }
+
+    // ── 5. Normalize from authoritative server-side data ───────────────────
+    const normalized = normalizeRssEntry(matchedEntry, dbSource);
+    if (!normalized) {
+      return res.status(422).json({ success: false, message: "Could not normalize this RSS entry (missing title or URL)." });
+    }
+
+    // ── 6. Duplicate check by sourceUrl (primary) ──────────────────────────
+    const duplicate = await prisma.article.findFirst({
+      where: { sourceUrl: normalized.sourceUrl },
+      select: { id: true, slug: true, status: true },
+    });
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        alreadyImported: true,
+        message: "This article has already been imported.",
+        existingArticleId: duplicate.id,
+        existingSlug: duplicate.slug,
+        existingStatus: duplicate.status,
+      });
+    }
+
+    // ── 7. Ensure slug uniqueness ───────────────────────────────────────────
+    let finalSlug = normalized.slug;
+    const slugExists = await prisma.article.findUnique({ where: { slug: finalSlug } });
+    if (slugExists) {
+      finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
+    }
+
+    // ── 8. Parse publication date safely ───────────────────────────────────
+    let publishedAt = new Date();
+    if (normalized.rawDate) {
+      const parsed = new Date(normalized.rawDate);
+      if (!isNaN(parsed.getTime())) publishedAt = parsed;
+    }
+
+    // ── 9. Create Article + ArticleCountry in a transaction ─────────────────
+    const newArticle = await prisma.$transaction(async (tx) => {
+      const article = await tx.article.create({
+        data: {
+          slug: finalSlug,
+          headline: normalized.headline,
+          summary: normalized.summary,
+          content: null,
+          category: normalized.category,
+          image: normalized.image,
+          readingTime: "3 min read",
+          breaking: false,
+          featured: false,
+          status: "DRAFT",
+          isRss: true,
+          sourceUrl: normalized.sourceUrl,
+          sourceName: normalized.sourceName,
+          rssSourceId: normalized.rssSourceId,
+          primaryCountryId: normalized.countryId,
+          publishedAt,
+        },
+      });
+
+      // Create ArticleCountry junction row
+      await tx.articleCountry.create({
+        data: { articleId: article.id, countryId: normalized.countryId },
+      });
+
+      return tx.article.findUnique({
+        where: { id: article.id },
+        include: {
+          countries: { include: { country: { select: { id: true, name: true, flag: true } } } },
+          primaryCountry: { select: { id: true, name: true, flag: true } },
+          rssSource: { select: { id: true, name: true } },
+        },
+      });
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `"${newArticle.headline}" imported as DRAFT.`,
+      article: newArticle,
+    });
+  } catch (error) {
+    console.error("RSS import error:", error);
+    return res.status(500).json({ success: false, message: "Failed to import article. Please try again." });
+  }
+});
+
 // Health check endpoint
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", database: "PostgreSQL abroad_bulletin", serverTime: new Date() });
 });
