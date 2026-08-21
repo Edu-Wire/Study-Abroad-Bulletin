@@ -76,6 +76,41 @@ const SOURCE_BADGE: Record<
     border: "border-blue-200/80",
     flag: "🇬🇧",
   },
+  "us-state-dept": {
+    label: "USA USCIS",
+    bg: "bg-sky-50",
+    text: "text-sky-700",
+    border: "border-sky-200/80",
+    flag: "🇺🇸",
+  },
+  "germany-ffo-articles": {
+    label: "Germany FFO",
+    bg: "bg-amber-50",
+    text: "text-amber-800",
+    border: "border-amber-200/80",
+    flag: "🇩🇪",
+  },
+  "germany-ffo-press": {
+    label: "Germany FFO Press",
+    bg: "bg-amber-50",
+    text: "text-amber-800",
+    border: "border-amber-200/80",
+    flag: "🇩🇪",
+  },
+  "nz-beehive-education": {
+    label: "NZ Education",
+    bg: "bg-emerald-50",
+    text: "text-emerald-800",
+    border: "border-emerald-200/80",
+    flag: "🇳🇿",
+  },
+  "eu-press-corner": {
+    label: "EU Press Corner",
+    bg: "bg-indigo-50",
+    text: "text-indigo-800",
+    border: "border-indigo-200/80",
+    flag: "🇪🇺",
+  },
 };
 
 const STATUS_LABEL: Record<string, string> = {

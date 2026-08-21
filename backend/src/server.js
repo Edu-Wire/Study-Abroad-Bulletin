@@ -648,50 +648,125 @@ app.delete("/api/admin/articles/:id", async (req, res) => {
 });
 
 // ============================================================
-// RSS UTILITIES (mirrors src/lib/rss/parser.ts — same library, same settings)
+// RSS UTILITIES — supports Atom AND RSS 2.0
 // Used only by the two admin RSS routes below.
+// Mirrors src/lib/rss/parser.ts settings for consistency.
 // ============================================================
 
-/** Same parser settings as src/lib/rss/parser.ts */
-function createAtomParser() {
+/** RSS User-Agent sent with every feed request to avoid headless-fetch 403s. */
+const RSS_USER_AGENT =
+  "Mozilla/5.0 (compatible; AbroadBulletinBot/1.0; +https://abroadbulletin.com)";
+
+/** Parser configured for both Atom and RSS 2.0 feeds. */
+function createFeedParser() {
   return new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "@_",
     textNodeName: "#text",
-    isArray: (name) => name === "entry",
+    isArray: (name) =>
+      name === "entry" ||          // Atom <entry>
+      name === "item" ||           // RSS 2.0 <item>
+      name === "media:content" ||  // multiple <media:content> per entry
+      name === "media:thumbnail",  // multiple <media:thumbnail> per entry
   });
 }
 
-/** Fetch a URL and return raw Atom <entry> objects. Returns [] on any failure. */
+/** Returns true when the body looks like HTML rather than XML. */
+function isHtmlBody(contentType, body) {
+  if (contentType.includes("text/html")) return true;
+  const t = body.trimStart();
+  return t.startsWith("<!DOCTYPE") || t.toLowerCase().startsWith("<html");
+}
+
+/**
+ * Fetch a feed URL and return raw entry/item objects.
+ * Supports Atom (<feed><entry>) and RSS 2.0 (<rss><channel><item>).
+ * Returns [] on any failure with a descriptive error log — never silently empty.
+ */
 async function fetchAtomEntriesRaw(url, logTag) {
+  let res;
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.error(`[${logTag}] HTTP ${res.status}`);
-      return [];
-    }
-    const xml = await res.text();
-    const parser = createAtomParser();
-    const parsed = parser.parse(xml);
-    return parsed?.feed?.entry ?? [];
+    res = await fetch(url, {
+      headers: {
+        "User-Agent": RSS_USER_AGENT,
+        Accept: "application/atom+xml, application/rss+xml, application/xml, text/xml, */*;q=0.8",
+      },
+    });
   } catch (err) {
-    console.error(`[${logTag}] Fetch/parse error:`, err.message);
+    console.error(`[${logTag}] ❌ Network error fetching feed (${url}):`, err.message);
     return [];
   }
+
+  if (!res.ok) {
+    console.error(`[${logTag}] ❌ HTTP ${res.status} ${res.statusText} from feed URL: ${url}`);
+    return [];
+  }
+
+  let xml;
+  try {
+    xml = await res.text();
+  } catch (err) {
+    console.error(`[${logTag}] ❌ Failed to read response body:`, err.message);
+    return [];
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (isHtmlBody(contentType, xml)) {
+    console.error(
+      `[${logTag}] ❌ Feed returned HTML instead of XML (Content-Type: ${contentType}). ` +
+      `The URL may have changed, moved behind a login, or a CAPTCHA. URL: ${url}`
+    );
+    return [];
+  }
+
+  let parsed;
+  try {
+    parsed = createFeedParser().parse(xml);
+  } catch (err) {
+    console.error(`[${logTag}] ❌ Failed to parse XML:`, err.message);
+    return [];
+  }
+
+  // Atom: <feed><entry>
+  let entries = parsed?.feed?.entry;
+  let format = "Atom";
+  if (!Array.isArray(entries) || entries.length === 0) {
+    // RSS 2.0: <rss><channel><item>
+    entries = parsed?.rss?.channel?.item;
+    format = "RSS 2.0";
+  }
+  // Single-entry guard: isArray config should prevent this, but be defensive
+  if (entries && !Array.isArray(entries)) entries = [entries];
+  entries = entries ?? [];
+
+  if (entries.length === 0) {
+    console.warn(
+      `[${logTag}] ⚠️ Feed parsed OK but no <entry> (Atom) or <item> (RSS 2.0) found. URL: ${url}`
+    );
+    return [];
+  }
+
+  console.log(`[${logTag}] ✅ Loaded ${entries.length} entries from ${format} feed.`);
+  return entries;
 }
 
-/** Extract href from Atom <link> field (handles string | object | array). */
+/** Extract href from Atom <link> field or RSS 2.0 plain text <link> node. */
 function extractLink(linkField) {
   if (!linkField) return "";
+  // RSS 2.0: <link>https://example.com</link> → plain string
   if (typeof linkField === "string") return linkField;
+  // RSS 2.0: text node parsed with textNodeName="#text"
+  if (typeof linkField === "object" && "#text" in linkField) return String(linkField["#text"] ?? "");
+  // Atom: array of <link> elements — prefer rel="alternate"
   if (Array.isArray(linkField)) {
     const alt = linkField.find((l) => l?.["@_rel"] === "alternate" || !l?.["@_rel"]);
-    return alt?.["@_href"] ?? "";
+    return alt?.["@_href"] ?? alt?.["#text"] ?? "";
   }
-  return linkField?.["@_href"] ?? "";
+  // Atom: single <link> object
+  return linkField?.["@_href"] ?? linkField?.["#text"] ?? "";
 }
 
-/** Extract plain text from an Atom field (handles string | { "#text": "…" }). */
+/** Extract plain text from an Atom/RSS field (handles string | { "#text": "…" }). */
 function extractText(field) {
   if (!field) return "";
   if (typeof field === "string") return field;
@@ -711,21 +786,61 @@ function toSlugRss(title, prefix) {
   return `${prefix}-${base}`;
 }
 
-/** Normalize one raw Atom entry for a given RSSSource DB record. Returns null if unusable. */
+/**
+ * Extract image URL from media:content, media:thumbnail, or enclosure.
+ * Returns null if none found — caller should fall back to source.fallbackImage.
+ */
+function extractImage(entry) {
+  // media:content
+  const mediaContent = entry?.["media:content"];
+  if (mediaContent) {
+    const items = Array.isArray(mediaContent) ? mediaContent : [mediaContent];
+    const img =
+      items.find((m) => m?.["@_medium"] === "image" || m?.["@_type"]?.startsWith("image/")) ??
+      items.find((m) => m?.["@_url"]);
+    if (img?.["@_url"]) return String(img["@_url"]);
+  }
+  // media:thumbnail
+  const mediaThumbnail = entry?.["media:thumbnail"];
+  if (mediaThumbnail) {
+    const items = Array.isArray(mediaThumbnail) ? mediaThumbnail : [mediaThumbnail];
+    const url = items[0]?.["@_url"];
+    if (url) return String(url);
+  }
+  // enclosure (RSS 2.0)
+  const enclosure = entry?.enclosure;
+  if (enclosure) {
+    const items = Array.isArray(enclosure) ? enclosure : [enclosure];
+    const imgEnc = items.find((e) => e?.["@_type"]?.startsWith("image/"));
+    if (imgEnc?.["@_url"]) return String(imgEnc["@_url"]);
+  }
+  return null;
+}
+
+/** Normalize one raw Atom/RSS 2.0 entry for a given RSSSource DB record. Returns null if unusable. */
 function normalizeRssEntry(entry, source) {
   try {
     const headline = extractText(entry?.title);
     if (!headline.trim()) return null;
 
-    const rawSummary = extractText(entry?.summary) || extractText(entry?.content) || "";
+    // Summary: Atom uses <summary>/<content>, RSS 2.0 uses <description>
+    const rawSummary =
+      extractText(entry?.summary) ||
+      extractText(entry?.description) ||
+      extractText(entry?.content) ||
+      "";
     const summary = rawSummary.replace(/<[^>]+>/g, "").trim() || "No summary available.";
 
-    // IRCC uses <published>; UKVI uses <updated>
-    const rawDate = entry?.published ?? entry?.updated ?? "";
+    // Date: Atom uses <published>/<updated>, RSS 2.0 uses <pubDate>
+    const rawDate = entry?.published ?? entry?.updated ?? entry?.pubDate ?? "";
+
     const sourceUrl = extractLink(entry?.link);
-    if (!sourceUrl) return null; // sourceUrl is our duplicate key — must exist
+    if (!sourceUrl) return null; // sourceUrl is our duplicate-detection key
 
     const slug = toSlugRss(headline, source.slugPrefix);
+
+    // Image: try media fields and enclosure; fall back to source.fallbackImage
+    const image = extractImage(entry) ?? source.fallbackImage;
 
     return {
       slug,
@@ -733,7 +848,7 @@ function normalizeRssEntry(entry, source) {
       summary,
       sourceUrl,
       rawDate,
-      image: source.fallbackImage,
+      image,
       sourceName: source.name,
       rssSourceId: source.id,
       countryId: source.countryId,

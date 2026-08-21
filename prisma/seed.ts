@@ -19,6 +19,8 @@ const countryCodeMap: Record<string, string> = {
   ireland: "IE",
   netherlands: "NL",
   france: "FR",
+  "new-zealand": "NZ",
+  eu: "EU",
 };
 
 const categoryMap: Record<string, ArticleCategory> = {

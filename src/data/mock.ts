@@ -307,6 +307,24 @@ export const countries: Country[] = [
     popularIntake: "September",
     updates: 39,
   },
+  {
+    id: "new-zealand",
+    name: "New Zealand",
+    flag: "🇳🇿",
+    universities: 8,
+    averageTuition: "NZD 32,000 / yr",
+    popularIntake: "February",
+    updates: 24,
+  },
+  {
+    id: "eu",
+    name: "European Union",
+    flag: "🇪🇺",
+    universities: 500,
+    averageTuition: "EUR 10,000 / yr",
+    popularIntake: "September",
+    updates: 50,
+  },
 ];
 
 export const universities: University[] = [
