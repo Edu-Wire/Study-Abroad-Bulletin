@@ -103,6 +103,42 @@ function mapArticleToNewsArticle(
   };
 }
 
+function getApiBaseUrl(): string | null {
+  const raw = process.env.NEXT_PUBLIC_API_URL;
+  if (!raw) return null;
+  const normalized = raw.replace(/\/+$/, "");
+  return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
+}
+
+async function getPublishedArticlesFromApi(): Promise<NewsArticle[] | null> {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl) return null;
+
+  try {
+    const res = await fetch(
+      `${apiBaseUrl}/admin/articles?status=PUBLISHED&limit=100`,
+      { cache: "no-store" }
+    );
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (!data?.success || !Array.isArray(data.articles)) {
+      throw new Error("Invalid articles response");
+    }
+
+    return data.articles.map(mapArticleToNewsArticle);
+  } catch (error) {
+    console.error(
+      "[articles.ts] Failed to fetch published articles from backend API:",
+      error
+    );
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Core data fetchers
 // ---------------------------------------------------------------------------
@@ -112,6 +148,9 @@ function mapArticleToNewsArticle(
  * Returns [] and logs the real error if the DB is unreachable.
  */
 export async function getPublishedArticles(): Promise<NewsArticle[]> {
+  const apiArticles = await getPublishedArticlesFromApi();
+  if (apiArticles) return apiArticles;
+
   try {
     const rows = await prisma.article.findMany({
       where: {
