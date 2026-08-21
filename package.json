@@ -5,12 +5,19 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "backend": "node backend/server.js",
+    "backend": "node --watch backend/src/server.js",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:seed": "prisma db seed",
+    "db:migrate": "prisma migrate dev"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
     "axios": "^1.19.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
@@ -22,6 +29,8 @@
     "lucide-react": "^1.31.0",
     "mongoose": "^9.9.2",
     "next": "16.3.0",
+    "pg": "^8.23.0",
+    "prisma": "^7.9.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "tailwind-merge": "^3.6.0",
@@ -30,11 +39,13 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5"
   },
   "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",

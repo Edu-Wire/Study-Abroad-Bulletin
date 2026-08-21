@@ -6,8 +6,7 @@ import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { SectionHeading } from "@/components/common/SectionHeading";
-import { news, scholarships, universities, countries } from "@/data/mock";
-import { immigrationDeadlines } from "@/data/immigrationDeadlines";
+import { prisma } from "@/lib/prisma";
 import { consultants } from "@/data/consultants";
 import { NewsCard } from "@/components/cards/NewsCards";
 import { UniversityCard } from "@/components/cards/UniversityCard";
@@ -17,6 +16,8 @@ import { ConsultantCard } from "@/components/cards/ConsultantCard";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner, InlineAd } from "@/components/editorial/AdComponents";
 import { getCanadaNews, getUKNews } from "@/lib/rss";
+import { getPublishedArticles } from "@/lib/articles";
+import type { ImmigrationDeadline } from "@/data/immigrationDeadlines";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -24,16 +25,12 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const country = countries.find((c) => c.id === slug);
+  const country = await prisma.country.findUnique({ where: { id: slug } });
   if (!country) return { title: "Country not found" };
   return {
     title: `Study in ${country.name} — Universities, Scholarships & Visa`,
-    description: `Everything international students need to know about studying in ${country.name}. ${country.universities} universities, avg. tuition ${country.averageTuition}.`,
+    description: `Everything international students need to know about studying in ${country.name}. ${country.universitiesCount} universities, avg. tuition ${country.averageTuition}.`,
   };
-}
-
-export function generateStaticParams() {
-  return countries.map((c) => ({ slug: c.id }));
 }
 
 const countryImages: Record<string, string> = {
@@ -49,23 +46,73 @@ const countryImages: Record<string, string> = {
 
 export default async function CountryDetailPage({ params }: Props) {
   const { slug } = await params;
-  const country = countries.find((c) => c.id === slug);
+  const country = await prisma.country.findUnique({
+    where: { id: slug },
+    include: {
+      universities: true,
+      immigrationDeadlines: true,
+      scholarships: {
+        include: {
+          scholarship: true,
+        },
+      },
+    },
+  });
+
   if (!country) notFound();
 
-  const countryUniversities = universities.filter((u) => u.country === country.name);
+  const countryUniversities = country.universities.map((u) => ({
+    id: u.slug,
+    name: u.name,
+    initials: u.initials,
+    country: country.name,
+    city: u.city,
+    ranking: u.ranking,
+    tuition: u.tuition,
+    tuitionValue: u.tuitionValue,
+    courses: u.courses,
+    scholarships: u.scholarships,
+    intake: u.intake,
+    degree: (u.degree as "Bachelors" | "Masters" | "Both") || "Both",
+    ielts: u.ielts,
+  }));
 
-  // Canada and UK: use ONLY real RSS data (no mock fallback during this testing phase).
-  // All other countries: filter mock articles as before.
-  const rssCountries = ["canada", "uk"] as const;
-  const countryNews =
-    slug === "canada"
-      ? await getCanadaNews()
-      : slug === "uk"
-        ? await getUKNews()
-        : news.filter((n) => n.country === country.name);
+  // Strictly use PostgreSQL published articles for all countries (editorial + approved RSS imports)
+  const countryNews = (await getPublishedArticles()).filter(
+    (n) => n.country.toLowerCase() === country.name.toLowerCase()
+  );
 
-  const countryScholarships = scholarships.filter((s) => s.country === country.name);
-  const countryDeadlines = immigrationDeadlines.filter((d) => d.country === country.name);
+  const countryScholarships = country.scholarships.map((s) => ({
+    id: s.scholarship.slug,
+    name: s.scholarship.name,
+    organization: s.scholarship.organization,
+    country: country.name,
+    funding: s.scholarship.funding,
+    degree: s.scholarship.degree,
+    deadline: s.scholarship.deadlineString,
+    daysLeft: 30,
+    eligibility: s.scholarship.eligibility,
+    type: (s.scholarship.type === "FULLY_FUNDED" ? "Fully Funded" : s.scholarship.type === "PARTIAL" ? "Partial" : "Tuition Waiver") as any,
+  }));
+
+  const countryDeadlines: ImmigrationDeadline[] = country.immigrationDeadlines.map((d) => ({
+    id: d.id,
+    slug: d.slug,
+    title: d.title,
+    country: country.name,
+    countryCode: country.code,
+    deadline: d.deadlineDate.toISOString().split("T")[0],
+    deadlineType: (d.deadlineType === "VISA" ? "Visa" : d.deadlineType === "IMMIGRATION" ? "Immigration" : d.deadlineType === "POLICY" ? "Policy" : d.deadlineType === "APPLICATION" ? "Application" : "Registration") as any,
+    status: (d.status === "CLOSING_SOON" ? "Closing Soon" : d.status === "UPCOMING" ? "Upcoming" : d.status === "UPDATED" ? "Updated" : "Passed") as any,
+    importance: (d.importance === "CRITICAL" ? "Critical" : d.importance === "HIGH" ? "High" : "Medium") as any,
+    description: d.description,
+    source: d.source,
+    lastUpdated: d.lastUpdated,
+    tags: d.tags,
+    applicationUrl: d.applicationUrl || undefined,
+    content: d.content || undefined,
+  }));
+
   const countryConsultants = consultants.filter((c) => c.destinations.includes(country.name) || c.country === country.name);
   const heroImage = countryImages[slug] ?? "/images/hero-campus.jpg";
 
@@ -104,10 +151,10 @@ export default async function CountryDetailPage({ params }: Props) {
           <div className="shell">
             <div className="grid grid-cols-2 gap-0 sm:grid-cols-4">
               {[
-                { label: "Universities", value: country.universities },
+                { label: "Universities", value: country.universitiesCount },
                 { label: "Avg. Tuition / yr", value: country.averageTuition },
                 { label: "Main Intake", value: country.popularIntake },
-                { label: "Monthly Updates", value: country.updates },
+                { label: "Monthly Updates", value: country.updatesCount },
               ].map(({ label, value }) => (
                 <div key={label} className="border-r border-border px-5 py-4 last:border-r-0">
                   <p className="eyebrow text-muted-foreground">{label}</p>
@@ -262,7 +309,7 @@ export default async function CountryDetailPage({ params }: Props) {
           {/* Latest news */}
           <div className="mt-12 border-t border-border pt-10">
             <SectionHeading
-              eyebrow={rssCountries.includes(slug as typeof rssCountries[number]) ? "Live Government News" : "Editorial"}
+              eyebrow={slug === "canada" || slug === "uk" ? "Live Government News" : "Editorial"}
               title={`Latest from ${country.name}`}
               action="All news"
               actionHref="/news"
@@ -276,12 +323,12 @@ export default async function CountryDetailPage({ params }: Props) {
             ) : (
               <div className="mt-8 rounded border border-border bg-surface px-6 py-10 text-center">
                 <p className="font-display text-lg font-bold text-foreground">
-                  {rssCountries.includes(slug as typeof rssCountries[number])
+                  {slug === "canada" || slug === "uk"
                     ? "Live news feed is currently unavailable."
                     : "No recent news for this destination."}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {rssCountries.includes(slug as typeof rssCountries[number])
+                  {slug === "canada" || slug === "uk"
                     ? "The official government feed could not be reached. Please try again later."
                     : "Check back soon for updates."}
                 </p>

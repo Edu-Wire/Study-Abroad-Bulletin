@@ -14,8 +14,13 @@ import {
   BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { news, universities, scholarships, countries, guides } from "@/data/mock";
+import { universities, scholarships, countries, guides } from "@/data/mock";
 import type { NewsArticle, University, Scholarship, Country, Guide } from "@/data/mock";
+
+interface SearchWithDropdownProps {
+  /** Live DB+RSS articles passed from a parent server component for search suggestions */
+  newsArticles?: NewsArticle[];
+}
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -32,13 +37,13 @@ const MAX_PER_KIND = 2;
 
 // ─── search logic ─────────────────────────────────────────────────────────────
 
-function searchAll(rawQuery: string): ResultItem[] {
+function searchAll(rawQuery: string, newsArticles: NewsArticle[]): ResultItem[] {
   const q = rawQuery.trim().toLowerCase();
   if (!q || q.length < 2) return [];
 
   const results: ResultItem[] = [];
 
-  const matchedNews = news.filter((n) =>
+  const matchedNews = newsArticles.filter((n) =>
     `${n.headline} ${n.summary} ${n.category} ${n.country}`
       .toLowerCase()
       .includes(q),
@@ -82,10 +87,10 @@ function searchAll(rawQuery: string): ResultItem[] {
   return results;
 }
 
-function countAll(q: string): number {
+function countAll(q: string, newsArticles: NewsArticle[]): number {
   if (!q || q.length < 2) return 0;
   return (
-    news.filter((n) =>
+    newsArticles.filter((n) =>
       `${n.headline} ${n.summary} ${n.category} ${n.country}`
         .toLowerCase()
         .includes(q),
@@ -177,11 +182,13 @@ export function SearchWithDropdown({
   size = "md",
   autoFocus,
   onClose,
+  newsArticles = [],
 }: {
   placeholder?: string;
   size?: "sm" | "md" | "lg";
   autoFocus?: boolean;
   onClose?: () => void;
+  newsArticles?: NewsArticle[];
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -191,9 +198,9 @@ export function SearchWithDropdown({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const q = query.trim().toLowerCase();
-  const results = searchAll(query);
+  const results = searchAll(query, newsArticles);
   const hasResults = results.length > 0;
-  const totalMatches = countAll(q);
+  const totalMatches = countAll(q, newsArticles);
   const showDropdown = open && q.length >= 2;
 
   // Close on outside click

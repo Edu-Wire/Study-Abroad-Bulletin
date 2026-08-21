@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  STUDENT
+  CONSULTANT // Preserved to match PostgreSQL DB; not actively assigned — zero users hold this role
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum ArticleCategory {
+  UNIVERSITIES
+  ADMISSIONS
+  SCHOLARSHIPS
+  VISA
+  STUDENT_LIFE
+  CAREER
+}
+
+enum ArticleStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  ARCHIVED
+  REJECTED
+}
+
+enum ScholarshipType {
+  FULLY_FUNDED
+  PARTIAL
+  TUITION_WAIVER
+}
+
+enum ImmigrationDeadlineType {
+  VISA
+  IMMIGRATION
+  APPLICATION
+  REGISTRATION
+  POLICY
+  SCHOLARSHIP
+}
+
+enum DeadlineStatus {
+  UPCOMING
+  CLOSING_SOON
+  PASSED
+  UPDATED
+}
+
+enum DeadlineImportance {
+  CRITICAL
+  HIGH
+  MEDIUM
+}
+
+// ============================================================
+// USER & AUTH
+// ============================================================
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  firstName String
+  lastName  String
+  role      UserRole   @default(STUDENT)
+  status    UserStatus @default(ACTIVE)
+  avatar    String?
+  lastLogin DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// ============================================================
+// GEOGRAPHY / DESTINATIONS
+// ============================================================
+
+model Country {
+  id                String   @id // e.g. "canada", "uk", "usa", "australia", "germany", "ireland", "netherlands", "france"
+  name              String   @unique
+  code              String   // e.g. "CA", "GB", "US", "AU", "DE", "IE", "NL", "FR"
+  flag              String   // Emoji e.g. "🇨🇦"
+  universitiesCount Int      @default(0)
+  averageTuition    String   // e.g. "CAD 28,500 / yr"
+  popularIntake     String   // e.g. "September"
+  updatesCount      Int      @default(0)
+  heroImage         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  universities         University[]
+  articles             ArticleCountry[]
+  primaryArticles      Article[]                 @relation("PrimaryCountry")
+  scholarships         ScholarshipHostCountry[]
+  immigrationDeadlines ImmigrationDeadline[]
+  rssSources           RSSSource[]
+  consultantsHQ        Consultant[]              @relation("ConsultantHQ")
+  consultantDestinations ConsultantDestination[]
+}
+
+// ============================================================
+// EDITORIAL & NEWS
+// ============================================================
+
+model Article {
+  id               String          @id @default(cuid())
+  slug             String          @unique
+  headline         String
+  summary          String          @db.Text
+  content          String?         @db.Text
+  category         ArticleCategory
+  readingTime      String          @default("4 min read")
+  image            String?
+  status           ArticleStatus   @default(DRAFT)
+  breaking         Boolean         @default(false)
+  featured         Boolean         @default(false)
+  isRss            Boolean         @default(false)
+  sourceUrl        String?
+  sourceName       String?
+  publishedAt      DateTime        @default(now())
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  // Country Relations
+  primaryCountryId String?
+  primaryCountry   Country?        @relation("PrimaryCountry", fields: [primaryCountryId], references: [id])
+  countries        ArticleCountry[]
+
+  // RSS Relation
+  rssSourceId      String?
+  rssSource        RSSSource?      @relation(fields: [rssSourceId], references: [id])
+}
+
+model ArticleCountry {
+  articleId String
+  countryId String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  country   Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, countryId])
+}
+
+// ============================================================
+// UNIVERSITIES & INTAKES
+// ============================================================
+
+model University {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  initials     String
+  countryId    String
+  country      Country  @relation(fields: [countryId], references: [id])
+  city         String
+  ranking      Int
+  tuition      String
+  tuitionValue Float
+  courses      String[]
+  scholarships Boolean  @default(true)
+  intake       String   @default("September 2027")
+  degree       String   @default("Both") // "Bachelors" | "Masters" | "Both"
+  ielts        String   @default("6.5")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  intakes             UniversityIntake[]
+  awardedScholarships Scholarship[]
+}
+
+model UniversityIntake {
+  id                  String     @id @default(cuid())
+  universityId        String
+  university          University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  term                String     // e.g. "Fall 2027", "Winter 2027", "Semester 1"
+  applicationDeadline DateTime?
+  documentDeadline    DateTime?
+  depositDeadline     DateTime?
+  isRolling           Boolean    @default(false)
+  status              String     @default("Open") // "Open", "Closing Soon", "Closed"
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+}
+
+// ============================================================
+// SCHOLARSHIPS
+// ============================================================
+
+model Scholarship {
+  id             String                   @id @default(cuid())
+  slug           String                   @unique
+  name           String
+  organization   String
+  funding        String
+  degree         String
+  deadline       DateTime?
+  deadlineString String                   // e.g. "30 September 2026"
+  eligibility    String                   @db.Text
+  type           ScholarshipType
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  // Optional University link
+  universityId   String?
+  university     University?              @relation(fields: [universityId], references: [id])
+
+  // Multi-country destinations
+  destinations   ScholarshipHostCountry[]
+}
+
+model ScholarshipHostCountry {
+  scholarshipId String
+  countryId     String
+  scholarship   Scholarship @relation(fields: [scholarshipId], references: [id], onDelete: Cascade)
+  country       Country     @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@id([scholarshipId, countryId])
+}
+
+// ============================================================
+// IMMIGRATION & POLICY TRACKER
+// ============================================================
+
+model ImmigrationDeadline {
+  id                  String                  @id // e.g. "ca-pal-fall-2026"
+  slug                String                  @unique
+  title               String
+  countryId           String
+  country             Country                 @relation(fields: [countryId], references: [id])
+  deadlineDate        DateTime
+  deadlineType        ImmigrationDeadlineType
+  status              DeadlineStatus
+  importance          DeadlineImportance
+  description         String                  @db.Text
+  source              String
+  lastUpdated         String
+  relatedArticleTitle String?
+  relatedArticleHref  String?
+  applicationUrl      String?
+  tags                String[]
+  content             String?                 @db.Text
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+}
+
+// ============================================================
+// RSS SOURCE REGISTRY
+// ============================================================
+
+model RSSSource {
+  id             String          @id // e.g. "ircc-canada", "ukvi"
+  name           String
+  countryId      String?         // Nullable for multi-country / global sources
+  country        Country?        @relation(fields: [countryId], references: [id])
+  category       ArticleCategory @default(VISA)
+  sourceType     String          @default("government") // "government" | "university" | "news"
+  feedUrl        String
+  enabled        Boolean         @default(true)
+  disabledReason String?         @db.Text
+  slugPrefix     String
+  fallbackImage  String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  articles       Article[]
+}
+
+// ============================================================
+// PARTNERS & CONSULTANTS
+// ============================================================
+
+model Consultant {
+  id           String                  @id // e.g. "global-pathways-education"
+  name         String
+  slug         String                  @unique
+  logo         String
+  description  String                  @db.Text
+  countryId    String                  // Headquarter Country
+  country      Country                 @relation("ConsultantHQ", fields: [countryId], references: [id])
+  cities       String[]
+  services     String[]
+  website      String
+  email        String
+  phone        String
+  verified     Boolean                 @default(false)
+  featured     Boolean                 @default(false)
+  rating       Float                   @default(5.0)
+  reviewCount  Int                     @default(0)
+  established  String
+  address      String
+  categories   String[]
+  sponsored    Boolean                 @default(false)
+  lastUpdated  String
+  aboutHtml    String?                 @db.Text
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  destinations ConsultantDestination[]
+}
+
+model ConsultantDestination {
+  consultantId String
+  countryId    String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  country      Country    @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@id([consultantId, countryId])
+}

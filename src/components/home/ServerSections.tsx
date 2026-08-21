@@ -3,14 +3,13 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import {
   images,
-  breakingHeadline,
-  news,
   countries,
   scholarships,
   visaUpdates,
   guides,
   deadlines,
 } from "@/data/mock";
+import type { NewsArticle } from "@/data/mock";
 import { SectionHeading } from "@/components/common/SectionHeading";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import {
@@ -37,8 +36,12 @@ function getEditionDate(): string {
     .toUpperCase();
 }
 
-export function Hero() {
-  const [lead, second, third, fourth, fifth] = news;
+interface HeroProps {
+  articles: NewsArticle[];
+}
+
+export function Hero({ articles }: HeroProps) {
+  const [lead, second, third, fourth, fifth] = articles;
   if (!lead) return null;
   const editionDate = getEditionDate();
 
@@ -216,7 +219,12 @@ export function Hero() {
 
 // ─── BREAKING STRIP ──────────────────────────────────────────────────────────
 
-export function BreakingStrip() {
+interface BreakingStripProps {
+  article: NewsArticle | null;
+}
+
+export function BreakingStrip({ article }: BreakingStripProps) {
+  if (!article) return null;
   return (
     <div className="border-b border-primary bg-primary">
       <div className="shell flex items-center justify-between gap-3 py-2 min-w-0">
@@ -225,11 +233,11 @@ export function BreakingStrip() {
             Breaking
           </span>
           <p className="min-w-0 flex-1 text-sm font-semibold text-primary-foreground truncate">
-            {breakingHeadline}
+            {article.headline}
           </p>
         </div>
         <Link
-          href="/news"
+          href={`/news/${article.slug}`}
           className="eyebrow shrink-0 text-primary-foreground/80 hover:text-primary-foreground transition-colors whitespace-nowrap"
         >
           View Story →
@@ -241,11 +249,15 @@ export function BreakingStrip() {
 
 // ─── TODAY'S BRIEFING ─────────────────────────────────────────────────────────
 
-export function TodaysBriefing() {
+interface TodaysBriefingProps {
+  articles: NewsArticle[];
+}
+
+export function TodaysBriefing({ articles }: TodaysBriefingProps) {
   // Deduplicate stories for the briefing — take one per category
-  const categorised: typeof news = [];
+  const categorised: NewsArticle[] = [];
   const seen = new Set<string>();
-  for (const article of news) {
+  for (const article of articles) {
     if (!seen.has(article.category)) {
       categorised.push(article);
       seen.add(article.category);

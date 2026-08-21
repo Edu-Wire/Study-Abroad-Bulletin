@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/site/Header";
-import { signup as apiSignup } from "../../../../backend/auth";
+import { signup as apiSignup } from "@/lib/api/auth";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -30,10 +30,12 @@ export default function SignupPage() {
 
     try {
       const res = await apiSignup(formData);
-      if (res.success) {
+      if (res.success && res.token) {
         if (typeof window !== "undefined") {
           localStorage.setItem("authToken", res.token);
-          localStorage.setItem("authUser", JSON.stringify(res.user));
+          if (res.user) {
+            localStorage.setItem("authUser", JSON.stringify(res.user));
+          }
         }
         router.push("/auth/welcome");
       }
