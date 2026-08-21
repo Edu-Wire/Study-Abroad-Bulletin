@@ -103,8 +103,11 @@ function mapArticleToNewsArticle(
   };
 }
 
+const productionBackendUrl = "http://13.233.198.182:8000";
+
 function getApiBaseUrl(): string | null {
-  const raw = process.env.NEXT_PUBLIC_API_URL;
+  const raw = process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === "production" ? productionBackendUrl : "");
   if (!raw) return null;
   const normalized = raw.replace(/\/+$/, "");
   return normalized.endsWith("/api") ? normalized : `${normalized}/api`;

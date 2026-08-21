@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://13.233.198.182:8000";
 
 function getTargetUrl(path: string[], request: NextRequest) {
   const baseUrl = backendUrl.replace(/\/+$/, "");
