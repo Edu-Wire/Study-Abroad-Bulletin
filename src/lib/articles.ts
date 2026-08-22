@@ -65,25 +65,30 @@ function formatPublishedDate(date: Date | string): string {
 // Mapper: Prisma Article row → NewsArticle (frontend type)
 // ---------------------------------------------------------------------------
 
-function mapArticleToNewsArticle(
-  article: {
-    id: string;
-    slug: string;
-    headline: string;
-    summary: string;
-    content: string | null;
-    category: string;
-    readingTime: string;
-    image: string | null;
-    breaking: boolean;
-    featured: boolean;
-    isRss: boolean;
-    sourceUrl: string | null;
-    sourceName: string | null;
-    publishedAt: Date;
-    primaryCountry: { id: string; name: string; flag: string } | null;
-  }
-): NewsArticle {
+type ArticleRecord = {
+  id: string;
+  slug: string;
+  headline: string;
+  summary: string;
+  content: string | null;
+  category: string;
+  readingTime: string;
+  image: string | null;
+  breaking: boolean;
+  featured: boolean;
+  isRss: boolean;
+  sourceUrl: string | null;
+  sourceName: string | null;
+  publishedAt: Date | string;
+  primaryCountry: { id: string; name: string; flag: string } | null;
+};
+
+type ArticlesApiResponse = {
+  success: boolean;
+  articles: ArticleRecord[];
+};
+
+function mapArticleToNewsArticle(article: ArticleRecord): NewsArticle {
   const cat = article.category as string;
   return {
     id:          article.id,
@@ -103,7 +108,7 @@ function mapArticleToNewsArticle(
   };
 }
 
-const productionBackendUrl = "http://13.233.198.182:8000";
+const productionBackendUrl = "https://13-233-198-182.sslip.io";
 
 function getApiBaseUrl(): string | null {
   const raw = process.env.NEXT_PUBLIC_API_URL ||
@@ -127,7 +132,7 @@ async function getPublishedArticlesFromApi(): Promise<NewsArticle[] | null> {
       throw new Error(`HTTP ${res.status}`);
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as Partial<ArticlesApiResponse>;
     if (!data?.success || !Array.isArray(data.articles)) {
       throw new Error("Invalid articles response");
     }
@@ -136,6 +141,36 @@ async function getPublishedArticlesFromApi(): Promise<NewsArticle[] | null> {
   } catch (error) {
     console.error(
       "[articles.ts] Failed to fetch published articles from backend API:",
+      error
+    );
+    return null;
+  }
+}
+
+async function getArticleBySlugFromApi(slug: string): Promise<NewsArticle | null> {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl) return null;
+
+  try {
+    const res = await fetch(
+      `${apiBaseUrl}/admin/articles?status=PUBLISHED&limit=100`,
+      { cache: "no-store" }
+    );
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = (await res.json()) as Partial<ArticlesApiResponse>;
+    if (!data?.success || !Array.isArray(data.articles)) {
+      throw new Error("Invalid articles response");
+    }
+
+    const article = data.articles.find((item) => item.slug === slug);
+    return article ? mapArticleToNewsArticle(article) : null;
+  } catch (error) {
+    console.error(
+      `[articles.ts] Failed to fetch article "${slug}" from backend API:`,
       error
     );
     return null;
@@ -228,6 +263,9 @@ export async function getBreakingArticle(): Promise<NewsArticle | null> {
  * Returns null if the article is not found in either source.
  */
 export async function getArticleBySlug(slug: string): Promise<NewsArticle | null> {
+  const apiArticle = await getArticleBySlugFromApi(slug);
+  if (apiArticle) return apiArticle;
+
   try {
     const row = await prisma.article.findFirst({
       where: {
