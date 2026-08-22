@@ -99,24 +99,69 @@ export const rssSources: RssSource[] = [
   // United States
   {
     id: "us-state-dept",
-    name: "U.S. Department of State",
+    name: "USCIS (U.S. Citizenship and Immigration Services)",
     country: "United States",
     category: "Visa",
     sourceType: "government",
-    feedUrl: "",
-    enabled: false,
-    disabledReason:
-      "No working official RSS/Atom feed for visa or student immigration news was found " +
-      "after live testing on 2026-08-13. Results: " +
-      "state.gov/press-releases/feed/ returned HTML (not XML); " +
-      "state.gov/feed/ returned empty RSS (zero items); " +
-      "state.gov/category/visas/feed/ returned a Technical Difficulties page; " +
-      "travel.state.gov RSS returned HTTP 403 Forbidden; " +
-      "uscis.gov/feeds/newsroom.xml returned HTTP 404; " +
-      "ice.gov/rss returned an HTML page with no usable feed links. " +
-      "Re-enable when a verified stable machine-readable endpoint is identified.",
-    slugPrefix: "usdos",
+    // Verified live on 2026-08-21: RSS 2.0 feed, 200 OK, ~20+ items.
+    // Covers official USCIS news: student/exchange visa policy (I-539, I-765),
+    // immigration alerts, policy manual updates, and news releases.
+    feedUrl: "https://www.uscis.gov/news/rss-feed/59144",
+    enabled: true,
+    slugPrefix: "uscis",
     fallbackImage: "/images/news-library.jpg",
+  },
+
+  // Germany — Federal Foreign Office (Articles)
+  {
+    id: "germany-ffo-articles",
+    name: "German Federal Foreign Office (Articles)",
+    country: "Germany",
+    category: "Visa",
+    sourceType: "government",
+    feedUrl: "https://www.auswaertiges-amt.de/static/includes/rss_en/RSS_Aktuelle_Artikel.xml",
+    enabled: true,
+    slugPrefix: "ffo-de",
+    fallbackImage: "/images/news-germany.jpg",
+  },
+
+  // Germany — Federal Foreign Office (Press Releases & Speeches)
+  {
+    id: "germany-ffo-press",
+    name: "German Federal Foreign Office (Press Releases)",
+    country: "Germany",
+    category: "Visa",
+    sourceType: "government",
+    feedUrl: "https://www.auswaertiges-amt.de/static/includes/rss_en/RSS_Pressemitteilungen_Reden.xml",
+    enabled: true,
+    slugPrefix: "ffo-press",
+    fallbackImage: "/images/news-germany.jpg",
+  },
+
+  // New Zealand — Beehive (Ministry of Education)
+  {
+    id: "nz-beehive-education",
+    name: "NZ Beehive (Ministry of Education)",
+    country: "New Zealand",
+    category: "Universities",
+    sourceType: "government",
+    feedUrl: "https://www.beehive.govt.nz/taxonomy/term/6729/feed",
+    enabled: true,
+    slugPrefix: "nz-edu",
+    fallbackImage: "/images/news-library.jpg",
+  },
+
+  // European Union — European Commission Press Corner
+  {
+    id: "eu-press-corner",
+    name: "European Commission Press Corner",
+    country: "European Union",
+    category: "Scholarships",
+    sourceType: "government",
+    feedUrl: "https://ec.europa.eu/commission/presscorner/api/rss",
+    enabled: true,
+    slugPrefix: "eu-press",
+    fallbackImage: "/images/news-scholarship.jpg",
   },
 ];
 
