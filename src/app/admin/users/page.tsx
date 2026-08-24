@@ -19,6 +19,7 @@ import {
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer } from "@/components/admin/AdminTable";
 import { StatusBadge } from "@/components/admin/StatusBadge";
+import { adminGet, adminPost, adminPatch, adminDelete } from "@/lib/api/apiClient";
 
 interface UserItem {
   id: string;
@@ -73,12 +74,11 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:8000/api/admin/users");
-      const data = await res.json();
+      const data = await adminGet<{ success: boolean; users: UserItem[] }>("/admin/users");
       if (data.success && data.users) {
         setUsers(data.users);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch admin users:", err);
     } finally {
       setLoading(false);
@@ -118,12 +118,10 @@ export default function AdminUsersPage() {
         payload.password = editForm.password.trim();
       }
 
-      const res = await fetch(`http://localhost:8000/api/admin/users/${editUser.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+      const data = await adminPatch<{ success: boolean; message: string }>(
+        `/admin/users/${editUser.id}`,
+        payload
+      );
       if (data.success) {
         setEditStatus({ success: true, message: data.message });
         fetchUsers();
@@ -137,10 +135,10 @@ export default function AdminUsersPage() {
           message: data.message || "Failed to update user.",
         });
       }
-    } catch {
+    } catch (err: any) {
       setEditStatus({
         success: false,
-        message: "Could not connect to backend server.",
+        message: err?.message || "Could not connect to backend server.",
       });
     } finally {
       setIsUpdating(false);
@@ -152,18 +150,17 @@ export default function AdminUsersPage() {
     setIsDeleting(true);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/users/${deleteTarget.id}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
+      const data = await adminDelete<{ success: boolean; message: string }>(
+        `/admin/users/${deleteTarget.id}`
+      );
       if (data.success) {
         setDeleteTarget(null);
         fetchUsers();
       } else {
         alert(data.message || "Failed to delete user.");
       }
-    } catch {
-      alert("Failed to delete user. Server unreachable.");
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete user. Server unreachable.");
     } finally {
       setIsDeleting(false);
     }
@@ -175,12 +172,10 @@ export default function AdminUsersPage() {
     setInviteStatus(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/admin/users/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(inviteForm),
-      });
-      const data = await res.json();
+      const data = await adminPost<{ success: boolean; message: string }>(
+        "/admin/users/invite",
+        inviteForm
+      );
       if (data.success) {
         setInviteStatus({ success: true, message: data.message });
         setInviteForm({

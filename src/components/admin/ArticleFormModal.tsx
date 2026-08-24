@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { X, Loader2, CheckCircle2, AlertCircle, FileEdit, Globe } from "lucide-react";
+import { adminGet, adminPost, adminPut } from "@/lib/api/apiClient";
 
 type ArticleStatus = "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
 type ArticleCategory = "UNIVERSITIES" | "ADMISSIONS" | "SCHOLARSHIPS" | "VISA" | "STUDENT_LIFE" | "CAREER";
@@ -95,10 +96,11 @@ export function ArticleFormModal({
 
   // Fetch countries for dropdowns
   useEffect(() => {
-    fetch("http://localhost:8000/api/countries")
-      .then((r) => r.json())
+    adminGet<{ success: boolean; countries: Country[] }>("/countries")
       .then((d) => {
-        if (d.success) setCountries(d.countries);
+        if (d.success && Array.isArray(d.countries)) {
+          setCountries(d.countries);
+        }
       })
       .catch(console.error)
       .finally(() => setLoadingCountries(false));
@@ -126,21 +128,16 @@ export function ArticleFormModal({
     setResult(null);
 
     try {
-      const url =
+      const data =
         mode === "create"
-          ? "http://localhost:8000/api/admin/articles"
-          : `http://localhost:8000/api/admin/articles/${initialData?.id}`;
-
-      const res = await fetch(url, {
-        method: mode === "create" ? "POST" : "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          primaryCountryId: form.primaryCountryId || null,
-        }),
-      });
-
-      const data = await res.json();
+          ? await adminPost<{ success: boolean; message: string }>(
+              "/admin/articles",
+              { ...form, primaryCountryId: form.primaryCountryId || null }
+            )
+          : await adminPut<{ success: boolean; message: string }>(
+              `/admin/articles/${initialData?.id}`,
+              { ...form, primaryCountryId: form.primaryCountryId || null }
+            );
 
       if (data.success) {
         setResult({ success: true, message: data.message });
@@ -154,10 +151,10 @@ export function ArticleFormModal({
           message: data.message || "Something went wrong saving the article.",
         });
       }
-    } catch {
+    } catch (err: any) {
       setResult({
         success: false,
-        message: "Could not connect to backend server. Is it running on port 8000?",
+        message: err?.message || "Could not connect to backend server. Is it running on port 8000?",
       });
     } finally {
       setSubmitting(false);

@@ -25,6 +25,7 @@ import { AdminTableContainer, AdminEmptyState } from "@/components/admin/AdminTa
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ArticleFormModal } from "@/components/admin/ArticleFormModal";
 import { RSSPreviewPanel } from "@/components/admin/RSSPreviewPanel";
+import { adminGet, adminDelete, adminPatch } from "@/lib/api/apiClient";
 
 type ArticleStatus = "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
 type ArticleCategory = "UNIVERSITIES" | "ADMISSIONS" | "SCHOLARSHIPS" | "VISA" | "STUDENT_LIFE" | "CAREER";
@@ -111,13 +112,18 @@ export default function AdminNewsPage() {
         if (activeStatus !== "ALL") params.set("status", activeStatus);
         if (search.trim()) params.set("search", search.trim());
 
-        const res = await fetch(`http://localhost:8000/api/admin/articles?${params}`);
-        const data = await res.json();
-        if (data.success) {
-          setArticles(data.articles);
-          setTotalCount(data.totalCount ?? 0);
-          setTotalPages(data.totalPages ?? 1);
-          setCurrentPage(data.currentPage ?? page);
+        const res = await adminGet<{
+          success: boolean;
+          articles: Article[];
+          totalCount: number;
+          totalPages: number;
+          currentPage: number;
+        }>(`/admin/articles?${params}`);
+        if (res.success) {
+          setArticles(res.articles);
+          setTotalCount(res.totalCount ?? 0);
+          setTotalPages(res.totalPages ?? 1);
+          setCurrentPage(res.currentPage ?? page);
         }
       } catch (err) {
         console.error("Failed to fetch articles:", err);
@@ -148,10 +154,9 @@ export default function AdminNewsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/articles/${deleteTarget.id}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
+      const data = await adminDelete<{ success: boolean }>(
+        `/admin/articles/${deleteTarget.id}`
+      );
       if (data.success) {
         setDeleteTarget(null);
         fetchArticles();
@@ -165,11 +170,7 @@ export default function AdminNewsPage() {
 
   const handleQuickStatus = async (article: Article, newStatus: ArticleStatus) => {
     try {
-      await fetch(`http://localhost:8000/api/admin/articles/${article.id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      await adminPatch(`/admin/articles/${article.id}/status`, { status: newStatus });
       fetchArticles();
     } catch (err) {
       console.error("Status update failed:", err);

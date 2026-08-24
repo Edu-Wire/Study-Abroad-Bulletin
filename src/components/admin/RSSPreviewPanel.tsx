@@ -25,6 +25,7 @@ import {
   ChevronsRight,
   Sparkles,
 } from "lucide-react";
+import { adminGet, adminPost } from "@/lib/api/apiClient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -187,18 +188,19 @@ function RssItemCard({
   const handleImport = async () => {
     setImportState({ status: "loading" });
     try {
-      const res = await fetch("http://localhost:8000/api/admin/articles/import-rss", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rssSourceId: item.rssSourceId,
-          sourceUrl: item.sourceUrl,
-        }),
+      const data = await adminPost<{
+        success: boolean;
+        message: string;
+        alreadyImported?: boolean;
+        existingArticleId?: string;
+        existingStatus?: string;
+        article?: { id: string };
+      }>("/admin/articles/import-rss", {
+        rssSourceId: item.rssSourceId,
+        sourceUrl: item.sourceUrl,
       });
 
-      const data = await res.json();
-
-      if (res.status === 409 || data.alreadyImported) {
+      if (data.alreadyImported) {
         setImportState({
           status: "duplicate",
           message: data.message,
@@ -219,8 +221,8 @@ function RssItemCard({
         articleId: data.article?.id ?? "",
       });
       onImportSuccess(item.sourceUrl, data.article?.id ?? "");
-    } catch {
-      setImportState({ status: "error", message: "Network error — import failed." });
+    } catch (err: any) {
+      setImportState({ status: "error", message: err?.message || "Network error — import failed." });
     }
   };
 
@@ -369,15 +371,16 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:8000/api/admin/rss/preview");
-      const data = await res.json();
+      const data = await adminGet<{ success: boolean; items: RssPreviewItem[]; message?: string }>(
+        "/admin/rss/preview"
+      );
       if (data.success) {
         setItems(data.items ?? []);
       } else {
         setError(data.message ?? "Failed to load RSS preview.");
       }
-    } catch {
-      setError("Could not reach backend server. Is it running on port 8000?");
+    } catch (err: any) {
+      setError(err?.message || "Could not reach backend server. Is it running on port 8000?");
     } finally {
       setLoading(false);
     }

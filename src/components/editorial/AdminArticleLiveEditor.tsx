@@ -19,6 +19,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { adminPut, adminPatch } from "@/lib/api/apiClient";
 import {
   ArrowLeft,
   Edit3,
@@ -306,14 +307,9 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
   async function handleSave() {
     setSaving(true);
     try {
-      const token = getAuthToken();
-      const res = await fetch(`${API_BASE}/api/admin/articles/${article.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
+      const data = await adminPut<{ success: boolean; message?: string }>(
+        `/admin/articles/${article.id}`,
+        {
           slug: article.slug,
           headline: headline.trim(),
           summary: summary.trim(),
@@ -326,11 +322,10 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
           status: currentStatus,
           primaryCountryId: primaryCountryId || null,
           countryIds,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
-        throw new Error(data?.message || `HTTP ${res.status}`);
+        }
+      );
+      if (!data.success) {
+        throw new Error(data?.message || "Save failed.");
       }
       showToast("success", "All article changes saved successfully!");
       router.refresh();
@@ -344,15 +339,10 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
   async function handlePublish() {
     setPublishing(true);
     try {
-      const token = getAuthToken();
       // 1. Save all fields with status PUBLISHED
-      const resPut = await fetch(`${API_BASE}/api/admin/articles/${article.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
+      const putData = await adminPut<{ success: boolean; message?: string }>(
+        `/admin/articles/${article.id}`,
+        {
           slug: article.slug,
           headline: headline.trim(),
           summary: summary.trim(),
@@ -365,25 +355,19 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
           status: "PUBLISHED",
           primaryCountryId: primaryCountryId || null,
           countryIds,
-        }),
-      });
-      if (!resPut.ok) {
-        const putData = await resPut.json().catch(() => ({}));
-        throw new Error(putData?.message || `Save failed: HTTP ${resPut.status}`);
+        }
+      );
+      if (!putData.success) {
+        throw new Error(putData?.message || "Save failed.");
       }
 
       // 2. Status transition
-      const resPatch = await fetch(`${API_BASE}/api/admin/articles/${article.id}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ status: "PUBLISHED" }),
-      });
-      const data = await resPatch.json().catch(() => ({}));
-      if (!resPatch.ok || !data.success) {
-        throw new Error(data?.message || `HTTP ${resPatch.status}`);
+      const patchData = await adminPatch<{ success: boolean; message?: string }>(
+        `/admin/articles/${article.id}/status`,
+        { status: "PUBLISHED" }
+      );
+      if (!patchData.success) {
+        throw new Error(patchData?.message || "Status update failed.");
       }
       setCurrentStatus("PUBLISHED");
       showToast("success", "Story published successfully! 🎉");

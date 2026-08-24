@@ -5,6 +5,12 @@ import jwt from "jsonwebtoken";
 import { XMLParser } from "fast-xml-parser";
 import { connectDB } from "./config/db.js";
 import { prisma } from "./config/prisma.js";
+import {
+  requireAuth,
+  requireEditor,
+  requireAdmin,
+  requireSuperAdmin,
+} from "./middleware/auth.js";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -210,8 +216,9 @@ app.get("/api/me", async (req, res) => {
 /**
  * @route   GET /api/admin/users
  * @desc    List all platform users & staff for Admin panel
+ * @access  ADMIN, SUPER_ADMIN
  */
-app.get("/api/admin/users", async (req, res) => {
+app.get("/api/admin/users", ...requireAdmin, async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -240,8 +247,9 @@ app.get("/api/admin/users", async (req, res) => {
 /**
  * @route   POST /api/admin/users/invite
  * @desc    Invite/create a new staff user with role
+ * @access  ADMIN, SUPER_ADMIN
  */
-app.post("/api/admin/users/invite", async (req, res) => {
+app.post("/api/admin/users/invite", ...requireAdmin, async (req, res) => {
   try {
     const { firstName, lastName, email, role, password } = req.body;
 
@@ -303,8 +311,9 @@ app.post("/api/admin/users/invite", async (req, res) => {
 /**
  * @route   PATCH /api/admin/users/:id
  * @desc    Update user profile, role, status, and/or reset password with Bcrypt hashing
+ * @access  ADMIN, SUPER_ADMIN
  */
-app.patch("/api/admin/users/:id", async (req, res) => {
+app.patch("/api/admin/users/:id", ...requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, role, status, password } = req.body;
@@ -355,8 +364,9 @@ app.patch("/api/admin/users/:id", async (req, res) => {
 /**
  * @route   DELETE /api/admin/users/:id
  * @desc    Delete a user account from PostgreSQL
+ * @access  SUPER_ADMIN only
  */
-app.delete("/api/admin/users/:id", async (req, res) => {
+app.delete("/api/admin/users/:id", ...requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -405,8 +415,9 @@ app.get("/api/countries", async (req, res) => {
  * @route   GET /api/admin/articles
  * @desc    List articles with optional filters, search and pagination
  * @query   status, category, search, page, limit
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.get("/api/admin/articles", async (req, res) => {
+app.get("/api/admin/articles", ...requireEditor, async (req, res) => {
   try {
     const { status, category, search, page = "1", limit = "20" } = req.query;
     const pageNum = Math.max(1, parseInt(page));
@@ -456,8 +467,9 @@ app.get("/api/admin/articles", async (req, res) => {
 /**
  * @route   POST /api/admin/articles
  * @desc    Create a new article with optional country tags (Prisma transaction)
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.post("/api/admin/articles", async (req, res) => {
+app.post("/api/admin/articles", ...requireEditor, async (req, res) => {
   try {
     const {
       slug, headline, summary, content, category, image,
@@ -539,8 +551,9 @@ app.post("/api/admin/articles", async (req, res) => {
 /**
  * @route   PUT /api/admin/articles/:id
  * @desc    Full update of an existing article with country sync
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.put("/api/admin/articles/:id", async (req, res) => {
+app.put("/api/admin/articles/:id", ...requireEditor, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -607,8 +620,9 @@ app.put("/api/admin/articles/:id", async (req, res) => {
 /**
  * @route   PATCH /api/admin/articles/:id/status
  * @desc    Change only the status of an article (status transition endpoint)
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.patch("/api/admin/articles/:id/status", async (req, res) => {
+app.patch("/api/admin/articles/:id/status", ...requireEditor, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -634,8 +648,9 @@ app.patch("/api/admin/articles/:id/status", async (req, res) => {
 /**
  * @route   DELETE /api/admin/articles/:id
  * @desc    Permanently delete article and its country junction rows (cascade)
+ * @access  ADMIN, SUPER_ADMIN
  */
-app.delete("/api/admin/articles/:id", async (req, res) => {
+app.delete("/api/admin/articles/:id", ...requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.article.delete({ where: { id } });
@@ -869,8 +884,9 @@ function normalizeRssEntry(entry, source) {
  * @route   GET /api/admin/rss/preview
  * @desc    Fetch live RSS items from all enabled sources and annotate
  *          each with whether it has already been imported into the DB.
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.get("/api/admin/rss/preview", async (req, res) => {
+app.get("/api/admin/rss/preview", ...requireEditor, async (req, res) => {
   try {
     // Load all enabled RSSSource records from DB
     const dbSources = await prisma.rSSSource.findMany({
@@ -948,8 +964,9 @@ app.get("/api/admin/rss/preview", async (req, res) => {
  * The server re-fetches the live feed, finds the matching entry,
  * normalizes it, checks for duplicates, then creates the Article + ArticleCountry
  * in a single Prisma transaction.
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.post("/api/admin/articles/import-rss", async (req, res) => {
+app.post("/api/admin/articles/import-rss", ...requireEditor, async (req, res) => {
   try {
     const { rssSourceId, sourceUrl: clientSourceUrl } = req.body;
 
