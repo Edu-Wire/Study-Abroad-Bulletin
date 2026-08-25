@@ -28,22 +28,27 @@ export default function LoginPage() {
 
     try {
       const res = await apiLogin(formData);
-      if (res.success && res.token) {
-        if (typeof window !== "undefined") {
-          if (res.user) {
-            localStorage.setItem("authUser", JSON.stringify(res.user));
-          }
-        }
-
+      // Success is signalled by `success` alone. The session is an HttpOnly
+      // cookie set by the server; there is no token in the response to check
+      // and nothing for this page to persist.
+      if (res.success) {
         const role = res.user?.role;
         if (role === "SUPER_ADMIN" || role === "ADMIN" || role === "EDITOR") {
           router.push("/admin");
         } else {
           router.push("/dashboard");
         }
+        // Ensure server components re-resolve the new session.
+        router.refresh();
+      } else {
+        setError(res.message || "Invalid email or password.");
       }
-    } catch (err: any) {
-      setError(err?.message || "Invalid email or password.");
+    } catch (err: unknown) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : "";
+      setError(message || "Invalid email or password.");
     } finally {
       setLoading(false);
     }

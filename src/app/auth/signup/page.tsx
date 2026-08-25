@@ -30,16 +30,19 @@ export default function SignupPage() {
 
     try {
       const res = await apiSignup(formData);
-      if (res.success && res.token) {
-        if (typeof window !== "undefined") {
-          if (res.user) {
-            localStorage.setItem("authUser", JSON.stringify(res.user));
-          }
-        }
+      // The session arrives as an HttpOnly cookie; nothing is stored here.
+      if (res.success) {
         router.push("/auth/welcome");
+        router.refresh();
+      } else {
+        setError(res.message || "Registration failed. Please try again.");
       }
-    } catch (err: any) {
-      setError(err?.message || "Registration failed. Please try again.");
+    } catch (err: unknown) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : "";
+      setError(message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }

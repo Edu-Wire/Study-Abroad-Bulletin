@@ -1,7 +1,9 @@
-import axios from "axios";
+/**
+ * Student data client. Requests go to the same-origin BFF at /api/backend/*;
+ * the HttpOnly session cookie authenticates them automatically.
+ */
 
-const rawBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_BASE_URL = rawBase.replace(/\/api\/?$/, "") + "/api";
+const API_BASE_PATH = "/api/backend";
 
 export interface RecommendedArticleItem {
   id: string;
@@ -85,19 +87,26 @@ export interface StudentFeedResponse {
  * Fetch the authenticated student's personalized feed from GET /api/student/feed.
  */
 export async function getStudentFeed(): Promise<StudentFeedResponse> {
+  let res: Response;
   try {
-    const response = await axios.get<StudentFeedResponse>(
-      `${API_BASE_URL}/student/feed`,
-      { withCredentials: true }
-    );
-    return response.data;
-  } catch (error: any) {
-    if (error.response?.data) {
-      throw error.response.data;
-    }
-    throw {
-      success: false,
-      message: "Failed to connect to backend server.",
-    };
+    res = await fetch(`${API_BASE_PATH}/student/feed`, {
+      method: "GET",
+      credentials: "include",
+    });
+  } catch {
+    throw { success: false, message: "Unable to reach the server. Please try again." };
   }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    throw { success: false, message: "Failed to load your personalized feed." };
+  }
+
+  if (!res.ok) {
+    throw data ?? { success: false, message: "Failed to load your personalized feed." };
+  }
+
+  return data as StudentFeedResponse;
 }

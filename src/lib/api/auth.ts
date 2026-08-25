@@ -1,25 +1,27 @@
-import axios from "axios";
+/**
+ * Authentication client.
+ *
+ * All calls go to the same-origin BFF at `/api/backend/*`. The session is an
+ * HttpOnly cookie set by the server: there is no token in any response body and
+ * nothing for client JavaScript to store or read.
+ */
 
-const rawBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_BASE_URL = rawBase.replace(/\/api\/?$/, "") + "/api";
-
-// Configure Axios to automatically send/receive cookies across requests
-axios.defaults.withCredentials = true;
+const API_BASE_PATH = "/api/backend";
 
 export interface AuthUser {
   id: string;
   firstName: string;
   lastName: string;
   email: string;
-  role?: "SUPER_ADMIN" | "ADMIN" | "EDITOR" | "STUDENT";
+  role?: "SUPER_ADMIN" | "ADMIN" | "EDITOR" | "STUDENT" | "CONSULTANT";
   status?: "ACTIVE" | "INVITED" | "SUSPENDED";
+  mustChangePassword?: boolean;
   lastLogin?: string;
 }
 
 export interface AuthResponse {
   success: boolean;
   message: string;
-  token?: string;
   user?: AuthUser;
 }
 
@@ -36,102 +38,106 @@ export interface SignupCredentials {
 }
 
 /**
- * Log in existing user (sets secure HttpOnly session cookie)
+ * Perform a JSON request against the BFF.
+ *
+ * Non-2xx responses are thrown as the parsed server payload so callers keep the
+ * server's own message, matching the previous axios-based behaviour.
  */
-export const login = async (
-  userData: LoginCredentials
-): Promise<AuthResponse> => {
+async function request<T>(
+  path: string,
+  init: RequestInit,
+  fallbackMessage: string
+): Promise<T> {
+  let res: Response;
   try {
-    const response = await axios.post<AuthResponse>(
-      `${API_BASE_URL}/login`,
-      userData,
-      {
-        headers: { "Content-Type": "application/json" },
-        withCredentials: true,
-      }
-    );
-    return response.data;
-  } catch (error: any) {
-    if (error.response && error.response.data) {
-      throw error.response.data;
-    }
-    throw {
-      success: false,
-      message: "Unable to connect to backend server on port 8000.",
-    };
-  }
-};
-
-/**
- * Register a new user (sets secure HttpOnly session cookie)
- */
-export const signup = async (
-  userData: SignupCredentials
-): Promise<AuthResponse> => {
-  try {
-    const response = await axios.post<AuthResponse>(
-      `${API_BASE_URL}/signup`,
-      userData,
-      {
-        headers: { "Content-Type": "application/json" },
-        withCredentials: true,
-      }
-    );
-    return response.data;
-  } catch (error: any) {
-    if (error.response && error.response.data) {
-      throw error.response.data;
-    }
-    throw {
-      success: false,
-      message: "Unable to connect to backend server on port 8000.",
-    };
-  }
-};
-
-/**
- * Fetch profile of currently logged-in user (uses HttpOnly session cookie or Bearer token)
- */
-export const getCurrentUser = async (
-  token?: string
-): Promise<AuthResponse> => {
-  try {
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-
-    const response = await axios.get<AuthResponse>(`${API_BASE_URL}/me`, {
-      headers,
-      withCredentials: true,
+    res = await fetch(`${API_BASE_PATH}${path}`, {
+      credentials: "include",
+      ...init,
     });
-    return response.data;
-  } catch (error: any) {
-    if (error.response && error.response.data) {
-      throw error.response.data;
-    }
-    throw {
-      success: false,
-      message: "Session expired or invalid token.",
-    };
+  } catch {
+    throw { success: false, message: "Unable to reach the server. Please try again." };
   }
-};
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    throw { success: false, message: fallbackMessage };
+  }
+
+  if (!res.ok) {
+    throw data ?? { success: false, message: fallbackMessage };
+  }
+
+  return data as T;
+}
+
+/** Log in an existing user. The server sets the HttpOnly session cookie. */
+export const login = (userData: LoginCredentials): Promise<AuthResponse> =>
+  request<AuthResponse>(
+    "/login",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(userData),
+    },
+    "Login failed. Please try again."
+  );
+
+/** Register a new user. The server sets the HttpOnly session cookie. */
+export const signup = (userData: SignupCredentials): Promise<AuthResponse> =>
+  request<AuthResponse>(
+    "/signup",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(userData),
+    },
+    "Sign-up failed. Please try again."
+  );
 
 /**
- * Log out and clear HttpOnly session cookie
+ * Fetch the current user.
+ *
+ * This is the only authority for client-side UI state: identity and role come
+ * from the server on every call, never from localStorage or a cookie.
  */
+export const getCurrentUser = (): Promise<AuthResponse> =>
+  request<AuthResponse>("/me", { method: "GET" }, "Session expired or invalid.");
+
+/** Log out, revoking the session server-side and clearing the cookie. */
 export const logout = async (): Promise<AuthResponse> => {
   try {
-    const response = await axios.post<AuthResponse>(
-      `${API_BASE_URL}/logout`,
-      {},
-      { withCredentials: true }
+    return await request<AuthResponse>(
+      "/logout",
+      { method: "POST", headers: { "Content-Type": "application/json" } },
+      "Logged out."
     );
-    return response.data;
-  } catch (error: any) {
-    return {
-      success: true,
-      message: "Logged out locally.",
-    };
+  } catch {
+    // The cookie is cleared server-side; a failed call must not trap the user.
+    return { success: true, message: "Logged out." };
   }
 };
+
+/** Revoke every session belonging to the current user. */
+export const logoutAll = (): Promise<AuthResponse> =>
+  request<AuthResponse>(
+    "/logout-all",
+    { method: "POST", headers: { "Content-Type": "application/json" } },
+    "Failed to sign out all sessions."
+  );
+
+/** Change the current user's password. Revokes all other sessions. */
+export const changePassword = (payload: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<AuthResponse> =>
+  request<AuthResponse>(
+    "/password/change",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    "Failed to update password."
+  );

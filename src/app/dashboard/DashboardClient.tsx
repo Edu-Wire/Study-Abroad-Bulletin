@@ -112,26 +112,23 @@ export function DashboardClient() {
 
   // 1. Load User Session
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("authUser");
-      if (stored) {
-        try {
-          setUser(JSON.parse(stored));
-        } catch {
-          // ignore parsing error
+    // Identity comes from the server only. Nothing about the user is cached in
+    // localStorage, where it could be read or tampered with.
+    let cancelled = false;
+
+    getCurrentUser()
+      .then((res) => {
+        if (!cancelled && res.success && res.user) {
+          setUser(res.user);
         }
-      }
-      getCurrentUser()
-        .then((res) => {
-          if (res.success && res.user) {
-            setUser(res.user);
-            localStorage.setItem("authUser", JSON.stringify(res.user));
-          }
-        })
-        .catch(() => {
-          // Session will be handled by cookies/edge middleware
-        });
-    }
+      })
+      .catch(() => {
+        // An invalid session is handled by the server on the next navigation.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 2. Fetch Live Personalized Feed from GET /api/student/feed

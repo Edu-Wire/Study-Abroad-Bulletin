@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search, X } from "lucide-react";
 import { SearchWithDropdown } from "@/components/common/SearchWithDropdown";
 import { cn } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/api/auth";
 
 const mainNav = [
   { label: "News", href: "/news" },
@@ -44,9 +45,21 @@ function UtilityBar({
 
   useEffect(() => {
     setDate(formatEditionDate());
-    if (typeof window !== "undefined") {
-      setIsLoggedIn(!!localStorage.getItem("authUser") || document.cookie.includes("auth_token="));
-    }
+
+    // The session cookie is HttpOnly, so it cannot be sniffed from JavaScript.
+    // Ask the server instead; this drives presentation only.
+    let cancelled = false;
+    getCurrentUser()
+      .then((res) => {
+        if (!cancelled) setIsLoggedIn(Boolean(res.success && res.user));
+      })
+      .catch(() => {
+        if (!cancelled) setIsLoggedIn(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

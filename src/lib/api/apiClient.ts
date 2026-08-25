@@ -1,64 +1,53 @@
 /**
- * adminFetch — Authenticated API client for all admin panel requests.
+ * adminFetch — API client for all admin panel requests.
  *
- * Automatically:
- *  - Resolves the API base URL from NEXT_PUBLIC_API_URL env var.
- *  - Transmits HttpOnly session cookies via credentials: "include".
- *  - Sets Content-Type: application/json for mutation requests.
- *  - Returns parsed JSON responses.
- *  - Throws structured { success: false, message: string } on errors.
+ * Requests go to the same-origin BFF at `/api/backend/*`, which forwards them
+ * to Express server-side. Deliberately absent:
+ *  - no backend URL or host (the browser never learns one),
+ *  - no Authorization header (there is no browser-readable token),
+ *  - no cookie reads (the session cookie is HttpOnly by design).
+ *
+ * Authentication travels as the HttpOnly session cookie, which the browser
+ * attaches automatically to this same-origin path.
  */
 
-const rawBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_BASE_URL = rawBase.replace(/\/api\/?$/, "") + "/api";
+const API_BASE_PATH = "/api/backend";
 
-/**
- * Retrieve the stored JWT token from auth_token cookie if available.
- */
-function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  const match = document.cookie.match(/(?:^|;\s*)auth_token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-/**
- * Build default headers for admin requests.
- */
-function buildHeaders(extra?: HeadersInit): HeadersInit {
-  const token = getAuthToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(extra as Record<string, string>),
-  };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  return headers;
+export interface ApiError {
+  success: false;
+  message: string;
+  status?: number;
 }
 
 /**
  * Core fetch wrapper for all admin API calls.
+ *
+ * @param path API path beginning with `/`, e.g. `/admin/articles`
  */
 export async function adminFetch<T = unknown>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> | undefined),
+  };
 
-  const res = await fetch(url, {
+  const res = await fetch(`${API_BASE_PATH}${path}`, {
     credentials: "include",
     ...options,
-    headers: buildHeaders(options.headers),
+    headers,
   });
 
   let data: T;
   try {
-    data = await res.json();
+    data = (await res.json()) as T;
   } catch {
     throw {
       success: false,
       message: `Server returned non-JSON response (HTTP ${res.status}).`,
-    };
+      status: res.status,
+    } satisfies ApiError;
   }
 
   if (res.status === 401) {
@@ -66,7 +55,7 @@ export async function adminFetch<T = unknown>(
       success: false,
       message: "Session expired or invalid. Please log in again.",
       status: 401,
-    };
+    } satisfies ApiError;
   }
 
   if (res.status === 403) {
@@ -74,7 +63,15 @@ export async function adminFetch<T = unknown>(
       success: false,
       message: "Access denied: Insufficient permissions.",
       status: 403,
-    };
+    } satisfies ApiError;
+  }
+
+  if (res.status === 429) {
+    throw {
+      success: false,
+      message: "Too many requests. Please slow down and try again shortly.",
+      status: 429,
+    } satisfies ApiError;
   }
 
   return data;

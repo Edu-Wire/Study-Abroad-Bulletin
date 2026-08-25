@@ -225,10 +225,9 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
     reader.readAsDataURL(file);
   }
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
   useEffect(() => {
-    fetch(`${API_BASE}/api/countries`)
+    // Same-origin BFF path; the browser never sees the backend host.
+    fetch("/api/backend/countries", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
         if (d.success && Array.isArray(d.countries)) {
@@ -236,7 +235,7 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
         }
       })
       .catch(console.error);
-  }, [API_BASE]);
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Link lock & Unsaved Changes Protection during Edit Mode

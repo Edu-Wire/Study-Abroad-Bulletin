@@ -18,15 +18,16 @@ export function LogoutButton({
   const router = useRouter();
 
   const handleLogout = async () => {
+    // The server revokes the session and clears the HttpOnly cookie. There is
+    // no client-side auth state to tidy up, and the cookie is not readable
+    // from JavaScript by design.
     try {
       await apiLogout();
-    } catch {}
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("authUser");
-      document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-      document.cookie = "auth_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    } catch {
+      // apiLogout already degrades gracefully; never trap the user here.
     }
     router.push("/auth/login");
+    router.refresh();
   };
 
   const baseStyles =

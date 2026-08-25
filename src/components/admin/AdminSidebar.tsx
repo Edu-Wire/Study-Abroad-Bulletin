@@ -21,7 +21,7 @@ import {
   LogOut,
   type LucideIcon,
 } from "lucide-react";
-import { logout as apiLogout } from "@/lib/api/auth";
+import { logout as apiLogout, getCurrentUser } from "@/lib/api/auth";
 
 interface AdminSidebarProps {
   onCloseMobile?: () => void;
@@ -139,20 +139,30 @@ export function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
     role?: string;
   } | null>(null);
 
+  // Identity and role come from the server on every mount, never from
+  // localStorage. This is display state only: the admin layout has already
+  // performed the authoritative role check server-side, and Express
+  // authorizes each API call independently.
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("authUser");
-      if (stored) {
-        try {
-          setUser(JSON.parse(stored));
-        } catch {
-          // Ignore parse error
+    let cancelled = false;
+
+    getCurrentUser()
+      .then((res) => {
+        if (!cancelled && res.success && res.user) {
+          setUser(res.user);
         }
-      }
-    }
+      })
+      .catch(() => {
+        // Leave user null; the layout guard governs access, not this sidebar.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const role = user?.role || "SUPER_ADMIN";
+  // No privilege is assumed before the server answers.
+  const role = user?.role;
 
   const isItemActive = (href: string, exact?: boolean) => {
     if (exact) {
@@ -162,17 +172,15 @@ export function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
   };
 
   const handleLogout = async () => {
+    // The server revokes the session and clears the HttpOnly cookie; there is
+    // no browser-side auth state to clear.
     try {
       await apiLogout();
-    } catch {}
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("authUser");
-      document.cookie =
-        "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-      document.cookie =
-        "auth_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    } catch {
+      // apiLogout degrades gracefully on its own.
     }
     router.push("/auth/login");
+    router.refresh();
   };
 
   const initials =
@@ -185,7 +193,9 @@ export function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
       ? "Super Admin"
       : role === "EDITOR"
       ? "Senior Editor"
-      : "Admin";
+      : role === "ADMIN"
+      ? "Admin"
+      : "";
 
   return (
     <aside className="h-full flex flex-col bg-[#071A33] text-slate-200 border-r border-[#152945] select-none">
@@ -230,9 +240,11 @@ export function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
       {/* Grouped Navigation List */}
       <div className="flex-1 px-3 py-4 overflow-y-auto space-y-5 no-scrollbar">
         {NAV_GROUPS.map((group) => {
-          const visibleItems = group.items.filter((item) =>
-            item.roles.includes(role)
-          );
+          // Until the server confirms the role, show nothing role-gated
+          // rather than guessing at privilege.
+          const visibleItems = role
+            ? group.items.filter((item) => item.roles.includes(role))
+            : [];
 
           if (visibleItems.length === 0) return null;
 
