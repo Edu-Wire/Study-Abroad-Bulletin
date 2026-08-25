@@ -1,12 +1,12 @@
-import jwt from "jsonwebtoken";
-import { prisma } from "../config/prisma.js";
-import { JWT_SECRET } from "../config/jwt.js";
+import { SESSION_COOKIE_NAME } from "../config/session.js";
+import { findActiveSession, touchSession } from "../services/session.service.js";
 
 // ---------------------------------------------------------------------------
 // Role hierarchy (higher index = more privileged)
 // ---------------------------------------------------------------------------
 const ROLE_LEVELS = {
   STUDENT: 0,
+  CONSULTANT: 0,
   EDITOR: 1,
   ADMIN: 2,
   SUPER_ADMIN: 3,
@@ -15,62 +15,49 @@ const ROLE_LEVELS = {
 /**
  * Helper to parse a specific cookie from the Cookie request header
  */
-function getCookie(req, name) {
+export function getCookie(req, name) {
   if (!req.headers.cookie) return null;
-  const match = req.headers.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = req.headers.cookie.match(
+    new RegExp(`(?:^|;\\s*)${escaped}=([^;]*)`)
+  );
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+/** Read the raw opaque session token from the request. */
+export function getSessionToken(req) {
+  return getCookie(req, SESSION_COOKIE_NAME);
+}
+
 // ---------------------------------------------------------------------------
-// authenticate — verify JWT (from Header or HttpOnly Cookie) and load user from DB
+// authenticate — resolve the opaque session cookie and load the user from the DB
+//
+// Express remains the sole authority: the session row is looked up on every
+// request and the user record is re-read, so revocation, expiry, suspension and
+// role changes all take effect on the very next request.
 // ---------------------------------------------------------------------------
 export async function authenticate(req, res, next) {
   try {
-    let token = null;
-    const authHeader = req.headers.authorization;
+    const rawToken = getSessionToken(req);
 
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.split(" ")[1];
-    } else {
-      token = getCookie(req, "auth_token");
-    }
-
-    if (!token) {
+    if (!rawToken) {
       return res.status(401).json({
         success: false,
-        message: "No authorization token provided.",
+        message: "Authentication required. Please log in.",
       });
     }
 
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
+    const resolved = await findActiveSession(rawToken);
+
+    // Missing, revoked, expired, and malformed tokens are indistinguishable.
+    if (!resolved) {
       return res.status(401).json({
         success: false,
-        message: "Invalid or expired token. Please log in again.",
+        message: "Session is invalid or has expired. Please log in again.",
       });
     }
 
-    // Load fresh user state from DB — do NOT trust stale role in JWT
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        status: true,
-      },
-    });
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User account not found. Please log in again.",
-      });
-    }
+    const { session, user } = resolved;
 
     if (user.status !== "ACTIVE") {
       return res.status(403).json({
@@ -79,8 +66,12 @@ export async function authenticate(req, res, next) {
       });
     }
 
-    // Attach user to request for downstream middleware / handlers
+    // Slide the idle window forward (throttled inside the service).
+    await touchSession(session);
+
     req.user = user;
+    req.session = { id: session.id, expiresAt: session.expiresAt };
+    req.sessionToken = rawToken;
     next();
   } catch (error) {
     console.error("[auth] authenticate error:", error);
@@ -117,6 +108,21 @@ export function authorize(...allowedRoles) {
   };
 }
 
+/**
+ * Block users who have been issued a temporary password until they have
+ * replaced it. Applied after `authenticate`, ahead of privileged work.
+ */
+export function requirePasswordChanged(req, res, next) {
+  if (req.user?.mustChangePassword) {
+    return res.status(403).json({
+      success: false,
+      code: "PASSWORD_CHANGE_REQUIRED",
+      message: "You must set a new password before continuing.",
+    });
+  }
+  next();
+}
+
 // ---------------------------------------------------------------------------
 // Convenient role preset middleware chains (use as arrays in route handlers)
 // ---------------------------------------------------------------------------
@@ -124,11 +130,25 @@ export function authorize(...allowedRoles) {
 /** Any authenticated user (any role). */
 export const requireAuth = [authenticate];
 
-/** EDITOR and above. */
-export const requireEditor = [authenticate, authorize("EDITOR", "ADMIN", "SUPER_ADMIN")];
+/** EDITOR and above, with a settled password. */
+export const requireEditor = [
+  authenticate,
+  requirePasswordChanged,
+  authorize("EDITOR", "ADMIN", "SUPER_ADMIN"),
+];
 
-/** ADMIN and above. */
-export const requireAdmin = [authenticate, authorize("ADMIN", "SUPER_ADMIN")];
+/** ADMIN and above, with a settled password. */
+export const requireAdmin = [
+  authenticate,
+  requirePasswordChanged,
+  authorize("ADMIN", "SUPER_ADMIN"),
+];
 
-/** SUPER_ADMIN only. */
-export const requireSuperAdmin = [authenticate, authorize("SUPER_ADMIN")];
+/** SUPER_ADMIN only, with a settled password. */
+export const requireSuperAdmin = [
+  authenticate,
+  requirePasswordChanged,
+  authorize("SUPER_ADMIN"),
+];
+
+export { ROLE_LEVELS };

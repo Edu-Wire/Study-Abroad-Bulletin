@@ -32,8 +32,42 @@ export const ARTICLE_STATUSES = [
 ];
 
 // ============================================================================
+// PASSWORD POLICY
+// ============================================================================
+
+/**
+ * Strong password policy applied to every path that sets a password:
+ * self-service signup, self-service change, and administrative reset.
+ *
+ * 12 characters with mixed classes, which resists offline cracking far better
+ * than the previous 8-character minimum.
+ */
+export const StrongPasswordSchema = z
+  .string()
+  .min(12, "Password must be at least 12 characters long")
+  .max(200, "Password must be at most 200 characters long")
+  .refine((value) => /[a-z]/.test(value), {
+    message: "Password must include a lowercase letter",
+  })
+  .refine((value) => /[A-Z]/.test(value), {
+    message: "Password must include an uppercase letter",
+  })
+  .refine((value) => /[0-9]/.test(value), {
+    message: "Password must include a digit",
+  })
+  .refine((value) => /[^A-Za-z0-9]/.test(value), {
+    message: "Password must include a symbol",
+  });
+
+// ============================================================================
 // AUTHENTICATION SCHEMAS
 // ============================================================================
+
+/** Schema for POST /api/password/change */
+export const PasswordChangeSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: StrongPasswordSchema,
+});
 
 /** Schema for POST /api/signup */
 export const SignupSchema = z.object({
@@ -50,9 +84,7 @@ export const SignupSchema = z.object({
     .trim()
     .email("Invalid email address")
     .toLowerCase(),
-  password: z
-    .string({ required_error: "Password is required" })
-    .min(8, "Password must be at least 8 characters long"),
+  password: StrongPasswordSchema,
 });
 
 /** Schema for POST /api/login */
@@ -96,13 +128,7 @@ export const UserInviteSchema = z.object({
       message: `Invalid role. Must be one of: ${USER_ROLES.join(", ")}`,
     }),
   }),
-  password: z
-    .string()
-    .trim()
-    .min(8, "Password must be at least 8 characters long")
-    .optional()
-    .or(z.literal(""))
-    .nullable(),
+  password: StrongPasswordSchema.optional().or(z.literal("")).nullable(),
 });
 
 /** Schema for PATCH /api/admin/users/:id */
@@ -132,12 +158,7 @@ export const UserUpdateSchema = z
         }),
       })
       .optional(),
-    password: z
-      .string()
-      .trim()
-      .min(8, "Password must be at least 8 characters long")
-      .optional()
-      .or(z.literal("")),
+    password: StrongPasswordSchema.optional().or(z.literal("")),
   })
   .strict("Unexpected field in user update request");
 

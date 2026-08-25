@@ -1,17 +1,28 @@
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { XMLParser } from "fast-xml-parser";
 import { connectDB } from "./config/db.js";
 import { prisma } from "./config/prisma.js";
-import { JWT_SECRET } from "./config/jwt.js";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_OPTIONS,
+  SESSION_ABSOLUTE_TTL_MS,
+} from "./config/session.js";
+import {
+  createSession,
+  revokeAllSessionsForUser,
+  revokeSessionByToken,
+} from "./services/session.service.js";
+import { requireBffSecret } from "./middleware/bff.js";
 import {
   requireAuth,
   requireEditor,
   requireAdmin,
   requireSuperAdmin,
+  authenticate,
+  getSessionToken,
 } from "./middleware/auth.js";
 import {
   authLimiter,
@@ -32,6 +43,7 @@ import {
   ArticleStatusUpdateSchema,
   RssImportSchema,
   StudentProfileSchema,
+  PasswordChangeSchema,
 } from "./validators/index.js";
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
 
@@ -60,13 +72,14 @@ app.use(
 );
 app.use(express.json());
 
-// Cookie configuration for session tokens
+// Every browser-facing endpoint must arrive through the trusted Next.js BFF.
+// /api/health is exempt so infrastructure probes keep working.
+app.use(requireBffSecret);
+
+// Cookie configuration for opaque session tokens.
 export const AUTH_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  path: "/",
+  ...SESSION_COOKIE_OPTIONS,
+  maxAge: SESSION_ABSOLUTE_TTL_MS,
 };
 
 /**
@@ -106,7 +119,7 @@ app.post(
   validateRequest({ body: SignupSchema }),
   async (req, res) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
+    const { firstName, lastName, email, password } = res.locals.validated.body;
 
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({
@@ -115,12 +128,7 @@ app.post(
       });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must be at least 8 characters long.",
-      });
-    }
+    // Password strength is enforced by StrongPasswordSchema in the validator.
 
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -150,20 +158,15 @@ app.post(
       },
     });
 
-    // Generate JWT Token (consistent with login payload)
-    const token = jwt.sign(
-      { userId: newUser.id, email: newUser.email, role: newUser.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    // Mint an opaque, database-backed session.
+    const { rawToken } = await createSession(newUser.id);
 
-    // Set secure HttpOnly cookie
-    res.cookie("auth_token", token, AUTH_COOKIE_OPTIONS);
+    // Host-only HttpOnly cookie. The raw token is never placed in the body.
+    res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
 
     return res.status(201).json({
       success: true,
-      message: "Account created successfully in PostgreSQL!",
-      token,
+      message: "Account created successfully.",
       user: {
         id: newUser.id,
         firstName: newUser.firstName,
@@ -192,7 +195,7 @@ app.post(
   validateRequest({ body: LoginSchema }),
   async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = res.locals.validated.body;
 
     if (!email || !password) {
       return res.status(400).json({
@@ -244,20 +247,15 @@ app.post(
       data: { lastLogin: new Date() },
     });
 
-    // Generate JWT Token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    // Mint an opaque, database-backed session.
+    const { rawToken } = await createSession(user.id);
 
-    // Set secure HttpOnly cookie
-    res.cookie("auth_token", token, AUTH_COOKIE_OPTIONS);
+    // Host-only HttpOnly cookie. The raw token is never placed in the body.
+    res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
 
     return res.status(200).json({
       success: true,
       message: "Logged in successfully!",
-      token,
       user: {
         id: user.id,
         firstName: user.firstName,
@@ -265,6 +263,7 @@ app.post(
         email: user.email,
         role: user.role,
         status: user.status,
+        mustChangePassword: user.mustChangePassword,
       },
     });
   } catch (error) {
@@ -280,18 +279,111 @@ app.post(
  * @route   POST /api/logout
  * @desc    Clear HttpOnly auth cookie and terminate session
  */
-app.post("/api/logout", (req, res) => {
-  res.clearCookie("auth_token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-  });
+app.post("/api/logout", async (req, res) => {
+  try {
+    // Revoke server-side first: clearing the cookie alone would leave a live
+    // session row that a copied token could still use.
+    const rawToken = getSessionToken(req);
+    if (rawToken) {
+      await revokeSessionByToken(rawToken);
+    }
+  } catch (error) {
+    console.error("[auth] logout revocation error:", error);
+  }
+
+  res.clearCookie(SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS);
   return res.status(200).json({
     success: true,
     message: "Logged out successfully.",
   });
 });
+
+/**
+ * @route   POST /api/logout-all
+ * @desc    Revoke every session belonging to the authenticated user
+ * @access  Authenticated
+ */
+app.post("/api/logout-all", ...requireAuth, async (req, res) => {
+  try {
+    const revoked = await revokeAllSessionsForUser(req.user.id);
+    res.clearCookie(SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS);
+    return res.status(200).json({
+      success: true,
+      message: `Signed out of ${revoked} session(s).`,
+    });
+  } catch (error) {
+    console.error("[auth] logout-all error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to sign out all sessions." });
+  }
+});
+
+/**
+ * @route   POST /api/password/change
+ * @desc    Self-service password change. Revokes every other session so a
+ *          stolen cookie cannot outlive the credential it was minted with.
+ * @access  Authenticated (allowed while mustChangePassword is set)
+ */
+app.post(
+  "/api/password/change",
+  authenticate,
+  authLimiter,
+  validateRequest({ body: PasswordChangeSchema }),
+  async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = res.locals.validated.body;
+
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { id: true, password: true },
+      });
+
+      if (!user) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Account not found." });
+      }
+
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Current password is incorrect." });
+      }
+
+      if (currentPassword === newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "The new password must differ from the current password.",
+        });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword, mustChangePassword: false },
+      });
+
+      // Keep the caller signed in, drop every other session.
+      const revoked = await revokeAllSessionsForUser(user.id, {
+        exceptSessionId: req.session.id,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Password updated. ${revoked} other session(s) were signed out.`,
+      });
+    } catch (error) {
+      console.error("[auth] password change error:", error);
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to update password." });
+    }
+  }
+);
 
 /**
  * @route   GET /api/me
@@ -355,7 +447,7 @@ app.put(
         preferredIntake = null,
         budgetRange = null,
         interests = [],
-      } = req.body;
+      } = res.locals.validated.body;
 
       const profile = await prisma.studentProfile.upsert({
         where: { userId: req.user.id },
@@ -467,7 +559,7 @@ app.post(
   validateRequest({ body: UserInviteSchema }),
   async (req, res) => {
   try {
-    const { firstName, lastName, email, role, password } = req.body;
+    const { firstName, lastName, email, role, password } = res.locals.validated.body;
 
     if (!firstName || !lastName || !email || !role) {
       return res.status(400).json({
@@ -522,6 +614,10 @@ app.post(
         password: hashedPassword,
         role,
         status: "ACTIVE",
+        // An administrator-chosen or auto-generated password is known to
+        // someone other than the account holder, so it must be replaced
+        // before the account can exercise its privileges.
+        mustChangePassword: true,
       },
       select: {
         id: true,
@@ -530,6 +626,7 @@ app.post(
         email: true,
         role: true,
         status: true,
+        mustChangePassword: true,
         createdAt: true,
       },
     });
@@ -558,8 +655,8 @@ app.patch(
   validateRequest({ params: UserIdParamSchema, body: UserUpdateSchema }),
   async (req, res) => {
   try {
-    const { id } = req.params;
-    const { firstName, lastName, role, status, password } = req.body;
+    const { id } = res.locals.validated.params;
+    const { firstName, lastName, role, status, password } = res.locals.validated.body;
     const caller = req.user;
 
     const existingUser = await prisma.user.findUnique({ where: { id } });
@@ -630,9 +727,12 @@ app.patch(
     if (status !== undefined) updateData.status = status;
 
     // Safely hash password with bcrypt if provided
-    if (password && password.trim()) {
+    const passwordWasReset = Boolean(password && password.trim());
+    if (passwordWasReset) {
       const salt = await bcrypt.genSalt(10);
       updateData.password = await bcrypt.hash(password.trim(), salt);
+      // An administrator now knows this password; the holder must replace it.
+      updateData.mustChangePassword = true;
     }
 
     const updatedUser = await prisma.user.update({
@@ -645,10 +745,16 @@ app.patch(
         email: true,
         role: true,
         status: true,
+        mustChangePassword: true,
         lastLogin: true,
         createdAt: true,
       },
     });
+
+    // A password reset or a suspension must not leave live sessions behind.
+    if (passwordWasReset || updateData.status === "SUSPENDED") {
+      await revokeAllSessionsForUser(id);
+    }
 
     return res.status(200).json({
       success: true,
@@ -672,7 +778,7 @@ app.delete(
   validateRequest({ params: UserIdParamSchema }),
   async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = res.locals.validated.params;
 
     // Prevent self-deletion
     if (id === req.user.id) {
@@ -735,12 +841,14 @@ app.get(
   validateRequest({ query: ArticleQuerySchema }),
   async (req, res) => {
   try {
-    const { status, category, search, page = "1", limit = "20" } = req.query;
-    const parsedPage = Number.parseInt(String(page), 10);
-    const parsedLimit = Number.parseInt(String(limit), 10);
-
-    const pageNum = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-    const limitNum = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(100, parsedLimit) : 20;
+    // Zod has already coerced and bounded page/limit, so no reparsing here.
+    const {
+      status,
+      category,
+      search,
+      page: pageNum,
+      limit: limitNum,
+    } = res.locals.validated.query;
     const skip = (pageNum - 1) * limitNum;
 
     const where = {};
@@ -797,7 +905,7 @@ app.post(
     const {
       slug, headline, summary, content, category, image,
       readingTime, breaking, featured, status, primaryCountryId, countryIds,
-    } = req.body;
+    } = res.locals.validated.body;
 
     if (!headline || !headline.trim()) {
       return res.status(400).json({ success: false, message: "Headline is required." });
@@ -886,11 +994,11 @@ app.put(
   validateRequest({ params: ArticleIdParamSchema, body: ArticleUpdateSchema }),
   async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = res.locals.validated.params;
     const {
       slug, headline, summary, content, category, image,
       readingTime, breaking, featured, status, primaryCountryId, countryIds,
-    } = req.body;
+    } = res.locals.validated.body;
 
     if (!headline?.trim()) return res.status(400).json({ success: false, message: "Headline is required." });
     if (!slug?.trim()) return res.status(400).json({ success: false, message: "Slug is required." });
@@ -963,8 +1071,8 @@ app.patch(
   validateRequest({ params: ArticleIdParamSchema, body: ArticleStatusUpdateSchema }),
   async (req, res) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
+    const { id } = res.locals.validated.params;
+    const { status } = res.locals.validated.body;
     const validStatuses = ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "ARCHIVED", "REJECTED"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
@@ -995,7 +1103,7 @@ app.delete(
   validateRequest({ params: ArticleIdParamSchema }),
   async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = res.locals.validated.params;
     await prisma.article.delete({ where: { id } });
     return res.status(200).json({ success: true, message: "Article deleted successfully." });
   } catch (error) {
@@ -1323,7 +1431,7 @@ app.post(
   validateRequest({ body: RssImportSchema }),
   async (req, res) => {
   try {
-    const { rssSourceId, sourceUrl: clientSourceUrl } = req.body;
+    const { rssSourceId, sourceUrl: clientSourceUrl } = res.locals.validated.body;
 
     // ── 1. Validate inputs ──────────────────────────────────────────────────
     if (!rssSourceId || typeof rssSourceId !== "string") {
