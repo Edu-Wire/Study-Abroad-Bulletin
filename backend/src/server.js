@@ -76,6 +76,10 @@ app.use(express.json());
 // /api/health is exempt so infrastructure probes keep working.
 app.use(requireBffSecret);
 
+// Baseline ceiling on all API traffic. Endpoint-specific limiters below are
+// stricter; this catches everything else, including read-heavy scraping.
+app.use("/api", generalApiLimiter);
+
 // Cookie configuration for opaque session tokens.
 export const AUTH_COOKIE_OPTIONS = {
   ...SESSION_COOKIE_OPTIONS,
@@ -186,7 +190,7 @@ app.post(
 
 /**
  * @route   POST /api/login
- * @desc    Authenticate user & return JWT token
+ * @desc    Authenticate user and establish an opaque session
  * @access  Public (Rate Limited: 10 requests / 15 mins)
  */
 app.post(
@@ -277,7 +281,7 @@ app.post(
 
 /**
  * @route   POST /api/logout
- * @desc    Clear HttpOnly auth cookie and terminate session
+ * @desc    Revoke the current session and clear its cookie
  */
 app.post("/api/logout", async (req, res) => {
   try {
@@ -436,6 +440,7 @@ app.get("/api/student/profile", ...requireAuth, async (req, res) => {
 app.put(
   "/api/student/profile",
   ...requireAuth,
+  adminMutationLimiter,
   validateRequest({ body: StudentProfileSchema }),
   async (req, res) => {
     try {
@@ -775,6 +780,7 @@ app.patch(
 app.delete(
   "/api/admin/users/:id",
   ...requireSuperAdmin,
+  adminMutationLimiter,
   validateRequest({ params: UserIdParamSchema }),
   async (req, res) => {
   try {
@@ -899,6 +905,7 @@ app.get(
 app.post(
   "/api/admin/articles",
   ...requireEditor,
+  adminMutationLimiter,
   validateRequest({ body: ArticleCreateSchema }),
   async (req, res) => {
   try {
@@ -991,6 +998,7 @@ app.post(
 app.put(
   "/api/admin/articles/:id",
   ...requireEditor,
+  adminMutationLimiter,
   validateRequest({ params: ArticleIdParamSchema, body: ArticleUpdateSchema }),
   async (req, res) => {
   try {
@@ -1068,6 +1076,7 @@ app.put(
 app.patch(
   "/api/admin/articles/:id/status",
   ...requireEditor,
+  adminMutationLimiter,
   validateRequest({ params: ArticleIdParamSchema, body: ArticleStatusUpdateSchema }),
   async (req, res) => {
   try {
@@ -1100,6 +1109,7 @@ app.patch(
 app.delete(
   "/api/admin/articles/:id",
   ...requireAdmin,
+  adminMutationLimiter,
   validateRequest({ params: ArticleIdParamSchema }),
   async (req, res) => {
   try {
@@ -1428,6 +1438,7 @@ app.get("/api/admin/rss/preview", ...requireEditor, async (req, res) => {
 app.post(
   "/api/admin/articles/import-rss",
   ...requireEditor,
+  adminMutationLimiter,
   validateRequest({ body: RssImportSchema }),
   async (req, res) => {
   try {
