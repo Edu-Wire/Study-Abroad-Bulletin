@@ -32,7 +32,6 @@ export default function SignupPage() {
       const res = await apiSignup(formData);
       if (res.success && res.token) {
         if (typeof window !== "undefined") {
-          localStorage.setItem("authToken", res.token);
           if (res.user) {
             localStorage.setItem("authUser", JSON.stringify(res.user));
           }

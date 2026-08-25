@@ -206,9 +206,18 @@ async function main() {
       },
     });
 
-    // Create default intake for university
-    await prisma.universityIntake.create({
-      data: {
+    // Create/update default intake for university (idempotent upsert)
+    await prisma.universityIntake.upsert({
+      where: {
+        universityId_term: {
+          universityId: university.id,
+          term: u.intake,
+        },
+      },
+      update: {
+        status: "Open",
+      },
+      create: {
         universityId: university.id,
         term: u.intake,
         status: "Open",
@@ -384,85 +393,70 @@ async function main() {
     }
   }
 
-  // 8. Seed Default Staff & User Accounts
-  console.log("👤 Ensuring UserRole schema and seeding Staff accounts...");
-  try {
-    await prisma.$executeRawUnsafe(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserStatus') THEN
-          CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'INVITED', 'SUSPENDED');
-        END IF;
-      END$$;
-    `);
-    await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'SUPER_ADMIN';`);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "status" "UserStatus" DEFAULT 'ACTIVE';`);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastLogin" timestamp(3);`);
-  } catch (e) {
-    console.log("Schema columns verified.");
+  // 8. Seed Staff & User Accounts
+  console.log("👤 Seeding initial Administrator account...");
+  const isProduction = process.env.NODE_ENV === "production";
+  const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL || (isProduction ? "" : "admin@abroadbulletin.com")).trim();
+  const adminPasswordPlain = (process.env.INITIAL_ADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD || (isProduction ? "" : "Admin@123456")).trim();
+
+  if (adminEmail && adminPasswordPlain) {
+    const salt = await bcrypt.genSalt(10);
+    const adminPassword = await bcrypt.hash(adminPasswordPlain, salt);
+
+    // Initial Super Admin (does not overwrite existing password on update)
+    await prisma.user.upsert({
+      where: { email: adminEmail },
+      update: {
+        role: UserRole.SUPER_ADMIN,
+        status: UserStatus.ACTIVE,
+      },
+      create: {
+        email: adminEmail,
+        password: adminPassword,
+        firstName: "System",
+        lastName: "Administrator",
+        role: UserRole.SUPER_ADMIN,
+        status: UserStatus.ACTIVE,
+      },
+    });
+    console.log(`✅ Seeded Super Admin: ${adminEmail}`);
+  } else if (isProduction) {
+    console.log("ℹ️ Skipping staff user seed in production (set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD to seed initial admin).");
   }
 
-  const salt = await bcrypt.genSalt(10);
-  const adminPassword = await bcrypt.hash("Admin@123456", salt);
-  const editorPassword = await bcrypt.hash("Editor@123456", salt);
-  const studentPassword = await bcrypt.hash("Student@123456", salt);
+  // Seed development test accounts only in non-production environments
+  if (!isProduction && process.env.SEED_DEMO_USERS === "true") {
+    const salt = await bcrypt.genSalt(10);
+    const editorPassword = await bcrypt.hash("Editor@123456", salt);
+    const studentPassword = await bcrypt.hash("Student@123456", salt);
 
-  // Super Admin
-  await prisma.user.upsert({
-    where: { email: "admin@abroadbulletin.com" },
-    update: {
-      role: UserRole.SUPER_ADMIN,
-      status: UserStatus.ACTIVE,
-      firstName: "Admin",
-      lastName: "Super",
-    },
-    create: {
-      email: "admin@abroadbulletin.com",
-      password: adminPassword,
-      firstName: "Admin",
-      lastName: "Super",
-      role: UserRole.SUPER_ADMIN,
-      status: UserStatus.ACTIVE,
-    },
-  });
+    await prisma.user.upsert({
+      where: { email: "editor@abroadbulletin.com" },
+      update: { role: UserRole.EDITOR, status: UserStatus.ACTIVE },
+      create: {
+        email: "editor@abroadbulletin.com",
+        password: editorPassword,
+        firstName: "Senior",
+        lastName: "Editor",
+        role: UserRole.EDITOR,
+        status: UserStatus.ACTIVE,
+      },
+    });
 
-  // Editor
-  await prisma.user.upsert({
-    where: { email: "editor@abroadbulletin.com" },
-    update: {
-      role: UserRole.EDITOR,
-      status: UserStatus.ACTIVE,
-      firstName: "Senior",
-      lastName: "Editor",
-    },
-    create: {
-      email: "editor@abroadbulletin.com",
-      password: editorPassword,
-      firstName: "Senior",
-      lastName: "Editor",
-      role: UserRole.EDITOR,
-      status: UserStatus.ACTIVE,
-    },
-  });
-
-  // Student
-  await prisma.user.upsert({
-    where: { email: "student@abroadbulletin.com" },
-    update: {
-      role: UserRole.STUDENT,
-      status: UserStatus.ACTIVE,
-      firstName: "Alex",
-      lastName: "Student",
-    },
-    create: {
-      email: "student@abroadbulletin.com",
-      password: studentPassword,
-      firstName: "Alex",
-      lastName: "Student",
-      role: UserRole.STUDENT,
-      status: UserStatus.ACTIVE,
-    },
-  });
+    await prisma.user.upsert({
+      where: { email: "student@abroadbulletin.com" },
+      update: { role: UserRole.STUDENT, status: UserStatus.ACTIVE },
+      create: {
+        email: "student@abroadbulletin.com",
+        password: studentPassword,
+        firstName: "Alex",
+        lastName: "Student",
+        role: UserRole.STUDENT,
+        status: UserStatus.ACTIVE,
+      },
+    });
+    console.log("✅ Seeded demo test accounts (Editor & Student).");
+  }
 
   console.log("✅ PostgreSQL Seed completed successfully!");
 }

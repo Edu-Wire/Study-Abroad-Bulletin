@@ -15,6 +15,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Loader2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer } from "@/components/admin/AdminTable";
@@ -51,6 +53,8 @@ export default function AdminUsersPage() {
     message?: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
+  const [copiedPassword, setCopiedPassword] = useState(false);
 
   // Edit user & password reset modal state
   const [editUser, setEditUser] = useState<UserItem | null>(null);
@@ -172,12 +176,19 @@ export default function AdminUsersPage() {
     setInviteStatus(null);
 
     try {
-      const data = await adminPost<{ success: boolean; message: string }>(
+      const data = await adminPost<{
+        success: boolean;
+        message: string;
+        temporaryPassword?: string | null;
+      }>(
         "/admin/users/invite",
         inviteForm
       );
       if (data.success) {
         setInviteStatus({ success: true, message: data.message });
+        if (data.temporaryPassword) {
+          setCreatedTempPassword(data.temporaryPassword);
+        }
         setInviteForm({
           firstName: "",
           lastName: "",
@@ -186,10 +197,12 @@ export default function AdminUsersPage() {
           password: "",
         });
         fetchUsers();
-        setTimeout(() => {
-          setIsInviteModalOpen(false);
-          setInviteStatus(null);
-        }, 1100);
+        if (!data.temporaryPassword) {
+          setTimeout(() => {
+            setIsInviteModalOpen(false);
+            setInviteStatus(null);
+          }, 1100);
+        }
       } else {
         setInviteStatus({
           success: false,
@@ -651,12 +664,15 @@ export default function AdminUsersPage() {
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Initial Password (Optional)
+                <label className="font-semibold text-slate-700 block mb-0.5">
+                  Password (Optional)
                 </label>
+                <p className="text-[11px] text-slate-500 mb-1.5">
+                  Leave blank to auto-generate a secure 12-character temporary password.
+                </p>
                 <input
                   type="password"
-                  placeholder="Default: Staff@123456"
+                  placeholder="Min. 8 characters or leave blank"
                   value={inviteForm.password}
                   onChange={(e) =>
                     setInviteForm({ ...inviteForm, password: e.target.value })
@@ -665,22 +681,56 @@ export default function AdminUsersPage() {
                 />
               </div>
 
+              {createdTempPassword && (
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-lg space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                      Temporary Password Generated
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdTempPassword);
+                        setCopiedPassword(true);
+                        setTimeout(() => setCopiedPassword(false), 2000);
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded cursor-pointer transition-colors"
+                    >
+                      {copiedPassword ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      <span>{copiedPassword ? "Copied!" : "Copy Password"}</span>
+                    </button>
+                  </div>
+                  <code className="block text-xs font-mono font-bold text-emerald-900 bg-white/80 px-2.5 py-1.5 rounded border border-emerald-200/60 select-all">
+                    {createdTempPassword}
+                  </code>
+                  <p className="text-[10.5px] text-emerald-700">
+                    Copy and share this temporary password with the staff member.
+                  </p>
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200/80">
                 <button
                   type="button"
-                  onClick={() => setIsInviteModalOpen(false)}
+                  onClick={() => {
+                    setIsInviteModalOpen(false);
+                    setCreatedTempPassword(null);
+                    setInviteStatus(null);
+                  }}
                   className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {createdTempPassword ? "Done" : "Cancel"}
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#1769E0] hover:bg-[#1357bd] rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
-                >
-                  {isSubmitting && <Loader2 className="h-3 w-3 animate-spin" />}
-                  {isSubmitting ? "Inviting..." : "Create Account"}
-                </button>
+                {!createdTempPassword && (
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-[#1769E0] hover:bg-[#1357bd] rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    {isSubmitting && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {isSubmitting ? "Inviting..." : "Create Account"}
+                  </button>
+                )}
               </div>
             </form>
           </div>

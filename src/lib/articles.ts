@@ -82,9 +82,15 @@ function mapArticleToNewsArticle(
     sourceName: string | null;
     publishedAt: Date;
     primaryCountry: { id: string; name: string; flag: string } | null;
+    countries?: { country: { id: string; name: string; flag: string } }[];
   }
 ): NewsArticle {
   const cat = article.category as string;
+  const countryName =
+    article.primaryCountry?.name ||
+    (article.countries && article.countries[0]?.country?.name) ||
+    "Global";
+
   return {
     id:          article.id,
     slug:        article.slug,
@@ -92,7 +98,7 @@ function mapArticleToNewsArticle(
     summary:     article.summary,
     content:     article.content,
     category:    CATEGORY_MAP[cat] ?? "Universities",
-    country:     article.primaryCountry?.name ?? "Global",
+    country:     countryName,
     date:        formatPublishedDate(article.publishedAt),
     readingTime: article.readingTime,
     image:       article.image || CATEGORY_IMAGE[cat] || "/images/news-library.jpg",
@@ -131,6 +137,50 @@ export async function getPublishedArticles(): Promise<NewsArticle[]> {
     // Do NOT silently swallow this error or return mock articles.
     console.error(
       "[articles.ts] ❌ Failed to fetch published articles from PostgreSQL:",
+      error
+    );
+    return [];
+  }
+}
+
+/**
+ * Fetches PUBLISHED articles specifically for a given country (by country ID / slug)
+ * using a database-level filtered query in PostgreSQL instead of loading all articles into memory.
+ *
+ * Matches articles where:
+ *   - primaryCountryId = countryId
+ *   OR
+ *   - countries (ArticleCountry relation) contains countryId
+ */
+export async function getPublishedArticlesByCountry(
+  countryId: string,
+  limit?: number
+): Promise<NewsArticle[]> {
+  try {
+    const rows = await prisma.article.findMany({
+      where: {
+        status: "PUBLISHED",
+        OR: [
+          { primaryCountryId: countryId },
+          { countries: { some: { countryId } } },
+        ],
+      },
+      include: {
+        primaryCountry: true,
+        countries: {
+          include: { country: true },
+        },
+      },
+      orderBy: {
+        publishedAt: "desc",
+      },
+      ...(limit ? { take: limit } : {}),
+    });
+
+    return rows.map(mapArticleToNewsArticle);
+  } catch (error) {
+    console.error(
+      `[articles.ts] ❌ Failed to fetch published articles for country "${countryId}" from PostgreSQL:`,
       error
     );
     return [];

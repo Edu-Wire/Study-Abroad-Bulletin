@@ -24,6 +24,7 @@ import { XMLParser } from "fast-xml-parser";
 
 /** How long Next.js caches each feed response before re-fetching (seconds). */
 export const RSS_REVALIDATE_SECONDS = 3600; // 1 hour
+export const RSS_FETCH_TIMEOUT_MS = 8000; // 8 seconds timeout ceiling
 
 /**
  * Sent with every outgoing RSS/Atom HTTP request.
@@ -143,6 +144,7 @@ export async function fetchAtomEntries(
   let response: Response;
   try {
     response = await fetch(url, {
+      signal: AbortSignal.timeout(RSS_FETCH_TIMEOUT_MS),
       next: { revalidate },
       headers: {
         "User-Agent": RSS_USER_AGENT,
@@ -150,8 +152,12 @@ export async function fetchAtomEntries(
           "application/atom+xml, application/rss+xml, application/xml, text/xml, */*;q=0.8",
       },
     });
-  } catch (err) {
-    console.error(`[${logTag}] ❌ Network error fetching feed (${url}):`, err);
+  } catch (err: any) {
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      console.warn(`[${logTag}] ⏱️ RSS fetch timed out after ${RSS_FETCH_TIMEOUT_MS}ms (${url})`);
+    } else {
+      console.error(`[${logTag}] ❌ Network error fetching feed (${url}):`, err);
+    }
     return [];
   }
 

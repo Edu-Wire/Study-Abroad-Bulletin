@@ -21,6 +21,7 @@ import {
   LogOut,
   type LucideIcon,
 } from "lucide-react";
+import { logout as apiLogout } from "@/lib/api/auth";
 
 interface AdminSidebarProps {
   onCloseMobile?: () => void;
@@ -160,9 +161,11 @@ export function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiLogout();
+    } catch {}
     if (typeof window !== "undefined") {
-      localStorage.removeItem("authToken");
       localStorage.removeItem("authUser");
       document.cookie =
         "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";

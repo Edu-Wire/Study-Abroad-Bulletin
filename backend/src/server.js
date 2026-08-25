@@ -2,32 +2,109 @@ import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { XMLParser } from "fast-xml-parser";
 import { connectDB } from "./config/db.js";
 import { prisma } from "./config/prisma.js";
+import { JWT_SECRET } from "./config/jwt.js";
 import {
   requireAuth,
   requireEditor,
   requireAdmin,
   requireSuperAdmin,
 } from "./middleware/auth.js";
+import {
+  authLimiter,
+  adminMutationLimiter,
+  generalApiLimiter,
+} from "./middleware/rateLimiter.js";
+import { validateRequest } from "./middleware/validate.js";
+import {
+  SignupSchema,
+  LoginSchema,
+  UserIdParamSchema,
+  UserInviteSchema,
+  UserUpdateSchema,
+  ArticleIdParamSchema,
+  ArticleQuerySchema,
+  ArticleCreateSchema,
+  ArticleUpdateSchema,
+  ArticleStatusUpdateSchema,
+  RssImportSchema,
+  StudentProfileSchema,
+} from "./validators/index.js";
+import { getPersonalizedRecommendations } from "./services/recommendation.js";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
-const JWT_SECRET = process.env.JWT_SECRET || "studyabroadnews_secret_key_2026";
 
-// Middleware
-app.use(cors({ origin: "*" }));
+// Allowed origins for CORS with credentials
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+// CORS configuration supporting HttpOnly cookies and credentials
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false); // Standard CORS denial: cleanly omits allow-origin header
+      }
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
-// Connect to Database
-connectDB();
+// Cookie configuration for session tokens
+export const AUTH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  path: "/",
+};
+
+/**
+ * Generate a cryptographically secure 12-character temporary password
+ */
+function generateTemporaryPassword(length = 12) {
+  const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lowercase = "abcdefghjkmnpqrstuvwxyz";
+  const numbers = "23456789";
+  const symbols = "!@#$%&*";
+  const all = uppercase + lowercase + numbers + symbols;
+
+  let pwd = "";
+  pwd += uppercase[crypto.randomInt(uppercase.length)];
+  pwd += lowercase[crypto.randomInt(lowercase.length)];
+  pwd += numbers[crypto.randomInt(numbers.length)];
+  pwd += symbols[crypto.randomInt(symbols.length)];
+
+  for (let i = 4; i < length; i++) {
+    pwd += all[crypto.randomInt(all.length)];
+  }
+
+  return pwd
+    .split("")
+    .sort(() => crypto.randomInt(3) - 1)
+    .join("");
+}
 
 /**
  * @route   POST /api/signup
  * @desc    Register a new user in PostgreSQL
+ * @access  Public (Rate Limited: 10 requests / 15 mins)
  */
-app.post("/api/signup", async (req, res) => {
+app.post(
+  "/api/signup",
+  authLimiter,
+  validateRequest({ body: SignupSchema }),
+  async (req, res) => {
   try {
     const { firstName, lastName, email, password } = req.body;
 
@@ -38,10 +115,10 @@ app.post("/api/signup", async (req, res) => {
       });
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 6 characters long.",
+        message: "Password must be at least 8 characters long.",
       });
     }
 
@@ -73,12 +150,15 @@ app.post("/api/signup", async (req, res) => {
       },
     });
 
-    // Generate JWT Token
+    // Generate JWT Token (consistent with login payload)
     const token = jwt.sign(
-      { userId: newUser.id, email: newUser.email },
+      { userId: newUser.id, email: newUser.email, role: newUser.role },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
+
+    // Set secure HttpOnly cookie
+    res.cookie("auth_token", token, AUTH_COOKIE_OPTIONS);
 
     return res.status(201).json({
       success: true,
@@ -104,8 +184,13 @@ app.post("/api/signup", async (req, res) => {
 /**
  * @route   POST /api/login
  * @desc    Authenticate user & return JWT token
+ * @access  Public (Rate Limited: 10 requests / 15 mins)
  */
-app.post("/api/login", async (req, res) => {
+app.post(
+  "/api/login",
+  authLimiter,
+  validateRequest({ body: LoginSchema }),
+  async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -138,6 +223,21 @@ app.post("/api/login", async (req, res) => {
       });
     }
 
+    // Check account lifecycle status (Kill-switch check)
+    if (user.status === "SUSPENDED") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been suspended. Please contact support or an administrator.",
+      });
+    }
+
+    if (user.status !== "ACTIVE") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is not active. Please complete account activation.",
+      });
+    }
+
     // Update lastLogin
     await prisma.user.update({
       where: { id: user.id },
@@ -150,6 +250,9 @@ app.post("/api/login", async (req, res) => {
       JWT_SECRET,
       { expiresIn: "7d" }
     );
+
+    // Set secure HttpOnly cookie
+    res.cookie("auth_token", token, AUTH_COOKIE_OPTIONS);
 
     return res.status(200).json({
       success: true,
@@ -174,42 +277,150 @@ app.post("/api/login", async (req, res) => {
 });
 
 /**
+ * @route   POST /api/logout
+ * @desc    Clear HttpOnly auth cookie and terminate session
+ */
+app.post("/api/logout", (req, res) => {
+  res.clearCookie("auth_token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  });
+  return res.status(200).json({
+    success: true,
+    message: "Logged out successfully.",
+  });
+});
+
+/**
  * @route   GET /api/me
  * @desc    Get current authenticated user info
  */
-app.get("/api/me", async (req, res) => {
+app.get("/api/me", ...requireAuth, async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ success: false, message: "Unauthorized token" });
-    }
-
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        status: true,
-        lastLogin: true,
-      },
+    return res.status(200).json({
+      success: true,
+      user: req.user,
     });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to fetch user profile." });
+  }
+});
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
+// ============================================================
+// STUDENT PROFILE ROUTES
+// ============================================================
+
+/**
+ * @route   GET /api/student/profile
+ * @desc    Get current authenticated student's profile & preferences
+ * @access  Authenticated User (STUDENT, etc.)
+ */
+app.get("/api/student/profile", ...requireAuth, async (req, res) => {
+  try {
+    const profile = await prisma.studentProfile.findUnique({
+      where: { userId: req.user.id },
+    });
 
     return res.status(200).json({
       success: true,
-      user,
+      profile: profile || null,
     });
   } catch (error) {
-    return res.status(401).json({ success: false, message: "Invalid or expired token" });
+    console.error("Fetch student profile error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch student profile.",
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/student/profile
+ * @desc    Create or update current authenticated student's profile
+ * @access  Authenticated User (STUDENT, etc.)
+ */
+app.put(
+  "/api/student/profile",
+  ...requireAuth,
+  validateRequest({ body: StudentProfileSchema }),
+  async (req, res) => {
+    try {
+      const {
+        targetCountries = [],
+        studyLevel = null,
+        degree = null,
+        branch = null,
+        preferredIntake = null,
+        budgetRange = null,
+        interests = [],
+      } = req.body;
+
+      const profile = await prisma.studentProfile.upsert({
+        where: { userId: req.user.id },
+        create: {
+          userId: req.user.id,
+          targetCountries,
+          studyLevel,
+          degree,
+          branch,
+          preferredIntake,
+          budgetRange,
+          interests,
+        },
+        update: {
+          targetCountries,
+          studyLevel,
+          degree,
+          branch,
+          preferredIntake,
+          budgetRange,
+          interests,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Student profile saved successfully.",
+        profile,
+      });
+    } catch (error) {
+      console.error("Save student profile error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to save student profile.",
+      });
+    }
+  }
+);
+
+/**
+ * @route   GET /api/student/feed
+ * @desc    Get personalized recommendation feed (articles, scholarships, deadlines)
+ * @access  Authenticated User (STUDENT, etc.)
+ */
+app.get("/api/student/feed", ...requireAuth, async (req, res) => {
+  try {
+    // Identity is derived strictly from verified req.user.id
+    const recommendations = await getPersonalizedRecommendations(req.user.id);
+
+    return res.status(200).json({
+      success: true,
+      hasProfile: recommendations.hasProfile,
+      profile: recommendations.profile,
+      data: {
+        articles: recommendations.articles,
+        scholarships: recommendations.scholarships,
+        deadlines: recommendations.deadlines,
+      },
+    });
+  } catch (error) {
+    console.error("Student feed generation error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate personalized student feed.",
+    });
   }
 });
 
@@ -247,9 +458,14 @@ app.get("/api/admin/users", ...requireAdmin, async (req, res) => {
 /**
  * @route   POST /api/admin/users/invite
  * @desc    Invite/create a new staff user with role
- * @access  ADMIN, SUPER_ADMIN
+ * @access  ADMIN, SUPER_ADMIN (Rate Limited)
  */
-app.post("/api/admin/users/invite", ...requireAdmin, async (req, res) => {
+app.post(
+  "/api/admin/users/invite",
+  adminMutationLimiter,
+  ...requireAdmin,
+  validateRequest({ body: UserInviteSchema }),
+  async (req, res) => {
   try {
     const { firstName, lastName, email, role, password } = req.body;
 
@@ -257,6 +473,13 @@ app.post("/api/admin/users/invite", ...requireAdmin, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Please provide first name, last name, email, and role.",
+      });
+    }
+
+    if (role === "SUPER_ADMIN" && req.user.role !== "SUPER_ADMIN") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: Only Super Admins can assign or invite Super Admin accounts.",
       });
     }
 
@@ -273,9 +496,23 @@ app.post("/api/admin/users/invite", ...requireAdmin, async (req, res) => {
       });
     }
 
-    const initialPassword = password || "Staff@123456";
+    let finalPassword = password && typeof password === "string" ? password.trim() : null;
+    let autoGenerated = false;
+
+    if (finalPassword) {
+      if (finalPassword.length < 8) {
+        return res.status(400).json({
+          success: false,
+          message: "Password must be at least 8 characters long.",
+        });
+      }
+    } else {
+      finalPassword = generateTemporaryPassword(12);
+      autoGenerated = true;
+    }
+
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(initialPassword, salt);
+    const hashedPassword = await bcrypt.hash(finalPassword, salt);
 
     const newUser = await prisma.user.create({
       data: {
@@ -301,6 +538,7 @@ app.post("/api/admin/users/invite", ...requireAdmin, async (req, res) => {
       success: true,
       message: `User created successfully with role ${role}.`,
       user: newUser,
+      temporaryPassword: autoGenerated ? finalPassword : null,
     });
   } catch (error) {
     console.error("Invite user error:", error);
@@ -311,16 +549,78 @@ app.post("/api/admin/users/invite", ...requireAdmin, async (req, res) => {
 /**
  * @route   PATCH /api/admin/users/:id
  * @desc    Update user profile, role, status, and/or reset password with Bcrypt hashing
- * @access  ADMIN, SUPER_ADMIN
+ * @access  ADMIN, SUPER_ADMIN (Rate Limited)
  */
-app.patch("/api/admin/users/:id", ...requireAdmin, async (req, res) => {
+app.patch(
+  "/api/admin/users/:id",
+  adminMutationLimiter,
+  ...requireAdmin,
+  validateRequest({ params: UserIdParamSchema, body: UserUpdateSchema }),
+  async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, role, status, password } = req.body;
+    const caller = req.user;
 
     const existingUser = await prisma.user.findUnique({ where: { id } });
     if (!existingUser) {
       return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    // Role Hierarchy & Self-Modification Security Rules:
+    // 1. A user cannot change their own role or status via this administrative endpoint
+    if (id === caller.id) {
+      if (role !== undefined && role !== caller.role) {
+        return res.status(403).json({
+          success: false,
+          message: "You cannot change your own role.",
+        });
+      }
+      if (status !== undefined && status !== caller.status) {
+        return res.status(403).json({
+          success: false,
+          message: "You cannot change your own account status.",
+        });
+      }
+    }
+
+    // 2. Non-SUPER_ADMIN callers (e.g. ADMIN) have restricted management permissions
+    if (caller.role !== "SUPER_ADMIN") {
+      // Cannot assign SUPER_ADMIN role to anyone
+      if (role === "SUPER_ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: Only Super Admins can assign the SUPER_ADMIN role.",
+        });
+      }
+
+      // Cannot modify a SUPER_ADMIN account
+      if (existingUser.role === "SUPER_ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: Cannot modify a Super Admin account.",
+        });
+      }
+
+      // Cannot modify another ADMIN's role, status, or credentials
+      if (existingUser.role === "ADMIN" && existingUser.id !== caller.id) {
+        if (role !== undefined || status !== undefined || password !== undefined) {
+          return res.status(403).json({
+            success: false,
+            message: "Access denied: Cannot modify another Administrator's privileged settings or credentials.",
+          });
+        }
+      }
+    }
+
+    const VALID_ROLES = ["SUPER_ADMIN", "ADMIN", "EDITOR", "STUDENT", "CONSULTANT"];
+    if (role !== undefined && !VALID_ROLES.includes(role)) {
+      return res.status(400).json({ success: false, message: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
+    }
+
+    const VALID_STATUSES = ["ACTIVE", "INVITED", "SUSPENDED"];
+    if (status !== undefined && !VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` });
     }
 
     const updateData = {};
@@ -366,9 +666,21 @@ app.patch("/api/admin/users/:id", ...requireAdmin, async (req, res) => {
  * @desc    Delete a user account from PostgreSQL
  * @access  SUPER_ADMIN only
  */
-app.delete("/api/admin/users/:id", ...requireSuperAdmin, async (req, res) => {
+app.delete(
+  "/api/admin/users/:id",
+  ...requireSuperAdmin,
+  validateRequest({ params: UserIdParamSchema }),
+  async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Prevent self-deletion
+    if (id === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot delete your own account.",
+      });
+    }
 
     const existingUser = await prisma.user.findUnique({ where: { id } });
     if (!existingUser) {
@@ -417,11 +729,18 @@ app.get("/api/countries", async (req, res) => {
  * @query   status, category, search, page, limit
  * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.get("/api/admin/articles", ...requireEditor, async (req, res) => {
+app.get(
+  "/api/admin/articles",
+  ...requireEditor,
+  validateRequest({ query: ArticleQuerySchema }),
+  async (req, res) => {
   try {
     const { status, category, search, page = "1", limit = "20" } = req.query;
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const parsedPage = Number.parseInt(String(page), 10);
+    const parsedLimit = Number.parseInt(String(limit), 10);
+
+    const pageNum = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const limitNum = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(100, parsedLimit) : 20;
     const skip = (pageNum - 1) * limitNum;
 
     const where = {};
@@ -469,7 +788,11 @@ app.get("/api/admin/articles", ...requireEditor, async (req, res) => {
  * @desc    Create a new article with optional country tags (Prisma transaction)
  * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.post("/api/admin/articles", ...requireEditor, async (req, res) => {
+app.post(
+  "/api/admin/articles",
+  ...requireEditor,
+  validateRequest({ body: ArticleCreateSchema }),
+  async (req, res) => {
   try {
     const {
       slug, headline, summary, content, category, image,
@@ -544,6 +867,10 @@ app.post("/api/admin/articles", ...requireEditor, async (req, res) => {
     });
   } catch (error) {
     console.error("Create article error:", error);
+    if (error.code === "P2002") {
+      const field = error.meta?.target ? ` (${error.meta.target.join(", ")})` : "";
+      return res.status(409).json({ success: false, message: `An article with this unique value${field} already exists.` });
+    }
     return res.status(500).json({ success: false, message: "Failed to create article." });
   }
 });
@@ -553,7 +880,11 @@ app.post("/api/admin/articles", ...requireEditor, async (req, res) => {
  * @desc    Full update of an existing article with country sync
  * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.put("/api/admin/articles/:id", ...requireEditor, async (req, res) => {
+app.put(
+  "/api/admin/articles/:id",
+  ...requireEditor,
+  validateRequest({ params: ArticleIdParamSchema, body: ArticleUpdateSchema }),
+  async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -613,6 +944,10 @@ app.put("/api/admin/articles/:id", ...requireEditor, async (req, res) => {
   } catch (error) {
     console.error("Update article error:", error);
     if (error.code === "P2025") return res.status(404).json({ success: false, message: "Article not found." });
+    if (error.code === "P2002") {
+      const field = error.meta?.target ? ` (${error.meta.target.join(", ")})` : "";
+      return res.status(409).json({ success: false, message: `An article with this unique value${field} already exists.` });
+    }
     return res.status(500).json({ success: false, message: "Failed to update article." });
   }
 });
@@ -622,7 +957,11 @@ app.put("/api/admin/articles/:id", ...requireEditor, async (req, res) => {
  * @desc    Change only the status of an article (status transition endpoint)
  * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.patch("/api/admin/articles/:id/status", ...requireEditor, async (req, res) => {
+app.patch(
+  "/api/admin/articles/:id/status",
+  ...requireEditor,
+  validateRequest({ params: ArticleIdParamSchema, body: ArticleStatusUpdateSchema }),
+  async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -650,7 +989,11 @@ app.patch("/api/admin/articles/:id/status", ...requireEditor, async (req, res) =
  * @desc    Permanently delete article and its country junction rows (cascade)
  * @access  ADMIN, SUPER_ADMIN
  */
-app.delete("/api/admin/articles/:id", ...requireAdmin, async (req, res) => {
+app.delete(
+  "/api/admin/articles/:id",
+  ...requireAdmin,
+  validateRequest({ params: ArticleIdParamSchema }),
+  async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.article.delete({ where: { id } });
@@ -693,6 +1036,9 @@ function isHtmlBody(contentType, body) {
   return t.startsWith("<!DOCTYPE") || t.toLowerCase().startsWith("<html");
 }
 
+/** Timeout ceiling for external feed requests (8 seconds) */
+const RSS_TIMEOUT_MS = 8000;
+
 /**
  * Fetch a feed URL and return raw entry/item objects.
  * Supports Atom (<feed><entry>) and RSS 2.0 (<rss><channel><item>).
@@ -702,13 +1048,18 @@ async function fetchAtomEntriesRaw(url, logTag) {
   let res;
   try {
     res = await fetch(url, {
+      signal: AbortSignal.timeout(RSS_TIMEOUT_MS),
       headers: {
         "User-Agent": RSS_USER_AGENT,
         Accept: "application/atom+xml, application/rss+xml, application/xml, text/xml, */*;q=0.8",
       },
     });
   } catch (err) {
-    console.error(`[${logTag}] ❌ Network error fetching feed (${url}):`, err.message);
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      console.warn(`[${logTag}] ⏱️ RSS feed request timed out after ${RSS_TIMEOUT_MS}ms (${url})`);
+    } else {
+      console.error(`[${logTag}] ❌ Network error fetching feed (${url}):`, err.message);
+    }
     return [];
   }
 
@@ -966,7 +1317,11 @@ app.get("/api/admin/rss/preview", ...requireEditor, async (req, res) => {
  * in a single Prisma transaction.
  * @access  EDITOR, ADMIN, SUPER_ADMIN
  */
-app.post("/api/admin/articles/import-rss", ...requireEditor, async (req, res) => {
+app.post(
+  "/api/admin/articles/import-rss",
+  ...requireEditor,
+  validateRequest({ body: RssImportSchema }),
+  async (req, res) => {
   try {
     const { rssSourceId, sourceUrl: clientSourceUrl } = req.body;
 
@@ -1111,6 +1466,13 @@ app.post("/api/admin/articles/import-rss", ...requireEditor, async (req, res) =>
     });
   } catch (error) {
     console.error("RSS import error:", error);
+    if (error.code === "P2002") {
+      return res.status(409).json({
+        success: false,
+        alreadyImported: true,
+        message: "This article has already been imported.",
+      });
+    }
     return res.status(500).json({ success: false, message: "Failed to import article. Please try again." });
   }
 });
@@ -1121,6 +1483,19 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", database: "PostgreSQL abroad_bulletin", serverTime: new Date() });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Authentication Backend Server running on http://localhost:${PORT}`);
-});
+/**
+ * Fail-fast server startup: only listen after database connection is verified
+ */
+async function startServer() {
+  const isConnected = await connectDB();
+  if (!isConnected) {
+    console.error("❌ Fatal: PostgreSQL database connection failed. Halting server startup.");
+    process.exit(1);
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 Authentication Backend Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();

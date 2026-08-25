@@ -127,14 +127,6 @@ const STATUS_LABELS: Record<string, string> = {
   REJECTED:       "Rejected",
 };
 
-function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  const ls = localStorage.getItem("authToken");
-  if (ls) return ls;
-  const match = document.cookie.match(/(?:^|;\s*)auth_token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
 function parseBody(content: string | null): string[] {
   if (!content) return [""];
   const cleaned = content

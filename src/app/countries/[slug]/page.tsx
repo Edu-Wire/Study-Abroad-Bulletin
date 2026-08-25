@@ -15,8 +15,7 @@ import { DeadlineTrackerCard } from "@/components/cards/DeadlineTrackerCard";
 import { ConsultantCard } from "@/components/cards/ConsultantCard";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner, InlineAd } from "@/components/editorial/AdComponents";
-import { getCanadaNews, getUKNews } from "@/lib/rss";
-import { getPublishedArticles } from "@/lib/articles";
+import { getPublishedArticlesByCountry } from "@/lib/articles";
 import type { ImmigrationDeadline } from "@/data/immigrationDeadlines";
 
 interface Props {
@@ -77,10 +76,8 @@ export default async function CountryDetailPage({ params }: Props) {
     ielts: u.ielts,
   }));
 
-  // Strictly use PostgreSQL published articles for all countries (editorial + approved RSS imports)
-  const countryNews = (await getPublishedArticles()).filter(
-    (n) => n.country.toLowerCase() === country.name.toLowerCase()
-  );
+  // Database-level query: only fetch published articles belonging to this country
+  const countryNews = await getPublishedArticlesByCountry(country.id);
 
   const countryScholarships = country.scholarships.map((s) => ({
     id: s.scholarship.slug,

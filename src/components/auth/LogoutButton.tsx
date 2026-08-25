@@ -2,6 +2,7 @@
 
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { logout as apiLogout } from "@/lib/api/auth";
 
 interface LogoutButtonProps {
   className?: string;
@@ -16,10 +17,14 @@ export function LogoutButton({
 }: LogoutButtonProps) {
   const router = useRouter();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiLogout();
+    } catch {}
     if (typeof window !== "undefined") {
-      localStorage.removeItem("authToken");
       localStorage.removeItem("authUser");
+      document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      document.cookie = "auth_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     }
     router.push("/auth/login");
   };

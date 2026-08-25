@@ -85,6 +85,28 @@ model User {
   lastLogin DateTime?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+
+  // Relations
+  studentProfile StudentProfile?
+}
+
+// ============================================================
+// STUDENT PROFILES & PREFERENCES
+// ============================================================
+
+model StudentProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetCountries String[] // Array of country IDs, e.g. ["canada", "uk", "germany"]
+  studyLevel      String? // "Bachelors" | "Masters" | "PhD" | "Diploma"
+  degree          String? // e.g. "Computer Science"
+  branch          String? // e.g. "Artificial Intelligence"
+  preferredIntake String? // e.g. "Fall 2027"
+  budgetRange     String? // e.g. "$20,000 - $35,000"
+  interests       String[] // e.g. ["SCHOLARSHIPS", "VISA", "ADMISSIONS"]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 // ============================================================
@@ -94,24 +116,24 @@ model User {
 model Country {
   id                String   @id // e.g. "canada", "uk", "usa", "australia", "germany", "ireland", "netherlands", "france"
   name              String   @unique
-  code              String   // e.g. "CA", "GB", "US", "AU", "DE", "IE", "NL", "FR"
-  flag              String   // Emoji e.g. "🇨🇦"
+  code              String // e.g. "CA", "GB", "US", "AU", "DE", "IE", "NL", "FR"
+  flag              String // Emoji e.g. "🇨🇦"
   universitiesCount Int      @default(0)
-  averageTuition    String   // e.g. "CAD 28,500 / yr"
-  popularIntake     String   // e.g. "September"
+  averageTuition    String // e.g. "CAD 28,500 / yr"
+  popularIntake     String // e.g. "September"
   updatesCount      Int      @default(0)
   heroImage         String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   // Relations
-  universities         University[]
-  articles             ArticleCountry[]
-  primaryArticles      Article[]                 @relation("PrimaryCountry")
-  scholarships         ScholarshipHostCountry[]
-  immigrationDeadlines ImmigrationDeadline[]
-  rssSources           RSSSource[]
-  consultantsHQ        Consultant[]              @relation("ConsultantHQ")
+  universities           University[]
+  articles               ArticleCountry[]
+  primaryArticles        Article[]                @relation("PrimaryCountry")
+  scholarships           ScholarshipHostCountry[]
+  immigrationDeadlines   ImmigrationDeadline[]
+  rssSources             RSSSource[]
+  consultantsHQ          Consultant[]             @relation("ConsultantHQ")
   consultantDestinations ConsultantDestination[]
 }
 
@@ -120,32 +142,36 @@ model Country {
 // ============================================================
 
 model Article {
-  id               String          @id @default(cuid())
-  slug             String          @unique
-  headline         String
-  summary          String          @db.Text
-  content          String?         @db.Text
-  category         ArticleCategory
-  readingTime      String          @default("4 min read")
-  image            String?
-  status           ArticleStatus   @default(DRAFT)
-  breaking         Boolean         @default(false)
-  featured         Boolean         @default(false)
-  isRss            Boolean         @default(false)
-  sourceUrl        String?
-  sourceName       String?
-  publishedAt      DateTime        @default(now())
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id          String          @id @default(cuid())
+  slug        String          @unique
+  headline    String
+  summary     String          @db.Text
+  content     String?         @db.Text
+  category    ArticleCategory
+  readingTime String          @default("4 min read")
+  image       String?
+  status      ArticleStatus   @default(DRAFT)
+  breaking    Boolean         @default(false)
+  featured    Boolean         @default(false)
+  isRss       Boolean         @default(false)
+  sourceUrl   String?         @unique
+  sourceName  String?
+  publishedAt DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   // Country Relations
   primaryCountryId String?
-  primaryCountry   Country?        @relation("PrimaryCountry", fields: [primaryCountryId], references: [id])
+  primaryCountry   Country?         @relation("PrimaryCountry", fields: [primaryCountryId], references: [id])
   countries        ArticleCountry[]
 
   // RSS Relation
-  rssSourceId      String?
-  rssSource        RSSSource?      @relation(fields: [rssSourceId], references: [id])
+  rssSourceId String?
+  rssSource   RSSSource? @relation(fields: [rssSourceId], references: [id])
+
+  @@index([status, publishedAt])
+  @@index([primaryCountryId, publishedAt])
+  @@index([rssSourceId])
 }
 
 model ArticleCountry {
@@ -183,13 +209,15 @@ model University {
   // Relations
   intakes             UniversityIntake[]
   awardedScholarships Scholarship[]
+
+  @@index([countryId])
 }
 
 model UniversityIntake {
   id                  String     @id @default(cuid())
   universityId        String
   university          University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  term                String     // e.g. "Fall 2027", "Winter 2027", "Semester 1"
+  term                String // e.g. "Fall 2027", "Winter 2027", "Semester 1"
   applicationDeadline DateTime?
   documentDeadline    DateTime?
   depositDeadline     DateTime?
@@ -197,6 +225,8 @@ model UniversityIntake {
   status              String     @default("Open") // "Open", "Closing Soon", "Closed"
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+
+  @@unique([universityId, term])
 }
 
 // ============================================================
@@ -204,25 +234,25 @@ model UniversityIntake {
 // ============================================================
 
 model Scholarship {
-  id             String                   @id @default(cuid())
-  slug           String                   @unique
+  id             String          @id @default(cuid())
+  slug           String          @unique
   name           String
   organization   String
   funding        String
   degree         String
   deadline       DateTime?
-  deadlineString String                   // e.g. "30 September 2026"
-  eligibility    String                   @db.Text
+  deadlineString String // e.g. "30 September 2026"
+  eligibility    String          @db.Text
   type           ScholarshipType
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   // Optional University link
-  universityId   String?
-  university     University?              @relation(fields: [universityId], references: [id])
+  universityId String?
+  university   University? @relation(fields: [universityId], references: [id])
 
   // Multi-country destinations
-  destinations   ScholarshipHostCountry[]
+  destinations ScholarshipHostCountry[]
 }
 
 model ScholarshipHostCountry {
@@ -258,6 +288,8 @@ model ImmigrationDeadline {
   content             String?                 @db.Text
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
+
+  @@index([countryId, deadlineDate])
 }
 
 // ============================================================
@@ -267,7 +299,7 @@ model ImmigrationDeadline {
 model RSSSource {
   id             String          @id // e.g. "ircc-canada", "ukvi"
   name           String
-  countryId      String?         // Nullable for multi-country / global sources
+  countryId      String? // Nullable for multi-country / global sources
   country        Country?        @relation(fields: [countryId], references: [id])
   category       ArticleCategory @default(VISA)
   sourceType     String          @default("government") // "government" | "university" | "news"
@@ -279,7 +311,7 @@ model RSSSource {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  articles       Article[]
+  articles Article[]
 }
 
 // ============================================================
@@ -287,30 +319,30 @@ model RSSSource {
 // ============================================================
 
 model Consultant {
-  id           String                  @id // e.g. "global-pathways-education"
-  name         String
-  slug         String                  @unique
-  logo         String
-  description  String                  @db.Text
-  countryId    String                  // Headquarter Country
-  country      Country                 @relation("ConsultantHQ", fields: [countryId], references: [id])
-  cities       String[]
-  services     String[]
-  website      String
-  email        String
-  phone        String
-  verified     Boolean                 @default(false)
-  featured     Boolean                 @default(false)
-  rating       Float                   @default(5.0)
-  reviewCount  Int                     @default(0)
-  established  String
-  address      String
-  categories   String[]
-  sponsored    Boolean                 @default(false)
-  lastUpdated  String
-  aboutHtml    String?                 @db.Text
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
+  id          String   @id // e.g. "global-pathways-education"
+  name        String
+  slug        String   @unique
+  logo        String
+  description String   @db.Text
+  countryId   String // Headquarter Country
+  country     Country  @relation("ConsultantHQ", fields: [countryId], references: [id])
+  cities      String[]
+  services    String[]
+  website     String
+  email       String
+  phone       String
+  verified    Boolean  @default(false)
+  featured    Boolean  @default(false)
+  rating      Float    @default(5.0)
+  reviewCount Int      @default(0)
+  established String
+  address     String
+  categories  String[]
+  sponsored   Boolean  @default(false)
+  lastUpdated String
+  aboutHtml   String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   destinations ConsultantDestination[]
 }

@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/prisma.js";
-
-const JWT_SECRET = process.env.JWT_SECRET || "studyabroadnews_secret_key_2026";
+import { JWT_SECRET } from "../config/jwt.js";
 
 // ---------------------------------------------------------------------------
 // Role hierarchy (higher index = more privileged)
@@ -13,21 +12,35 @@ const ROLE_LEVELS = {
   SUPER_ADMIN: 3,
 };
 
+/**
+ * Helper to parse a specific cookie from the Cookie request header
+ */
+function getCookie(req, name) {
+  if (!req.headers.cookie) return null;
+  const match = req.headers.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 // ---------------------------------------------------------------------------
-// authenticate — verify JWT and load current user from DB
+// authenticate — verify JWT (from Header or HttpOnly Cookie) and load user from DB
 // ---------------------------------------------------------------------------
 export async function authenticate(req, res, next) {
   try {
+    let token = null;
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+    } else {
+      token = getCookie(req, "auth_token");
+    }
+
+    if (!token) {
       return res.status(401).json({
         success: false,
         message: "No authorization token provided.",
       });
     }
-
-    const token = authHeader.split(" ")[1];
 
     let decoded;
     try {

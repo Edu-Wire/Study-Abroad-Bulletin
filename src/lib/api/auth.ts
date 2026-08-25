@@ -1,7 +1,10 @@
 import axios from "axios";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const rawBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = rawBase.replace(/\/api\/?$/, "") + "/api";
+
+// Configure Axios to automatically send/receive cookies across requests
+axios.defaults.withCredentials = true;
 
 export interface AuthUser {
   id: string;
@@ -33,7 +36,7 @@ export interface SignupCredentials {
 }
 
 /**
- * Log in existing user
+ * Log in existing user (sets secure HttpOnly session cookie)
  */
 export const login = async (
   userData: LoginCredentials
@@ -44,6 +47,7 @@ export const login = async (
       userData,
       {
         headers: { "Content-Type": "application/json" },
+        withCredentials: true,
       }
     );
     return response.data;
@@ -59,7 +63,7 @@ export const login = async (
 };
 
 /**
- * Register a new user
+ * Register a new user (sets secure HttpOnly session cookie)
  */
 export const signup = async (
   userData: SignupCredentials
@@ -70,6 +74,7 @@ export const signup = async (
       userData,
       {
         headers: { "Content-Type": "application/json" },
+        withCredentials: true,
       }
     );
     return response.data;
@@ -85,16 +90,20 @@ export const signup = async (
 };
 
 /**
- * Fetch profile of currently logged-in user using JWT token
+ * Fetch profile of currently logged-in user (uses HttpOnly session cookie or Bearer token)
  */
 export const getCurrentUser = async (
-  token: string
+  token?: string
 ): Promise<AuthResponse> => {
   try {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     const response = await axios.get<AuthResponse>(`${API_BASE_URL}/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
+      withCredentials: true,
     });
     return response.data;
   } catch (error: any) {
@@ -104,6 +113,25 @@ export const getCurrentUser = async (
     throw {
       success: false,
       message: "Session expired or invalid token.",
+    };
+  }
+};
+
+/**
+ * Log out and clear HttpOnly session cookie
+ */
+export const logout = async (): Promise<AuthResponse> => {
+  try {
+    const response = await axios.post<AuthResponse>(
+      `${API_BASE_URL}/logout`,
+      {},
+      { withCredentials: true }
+    );
+    return response.data;
+  } catch (error: any) {
+    return {
+      success: true,
+      message: "Logged out locally.",
     };
   }
 };

@@ -3,26 +3,20 @@
  *
  * Automatically:
  *  - Resolves the API base URL from NEXT_PUBLIC_API_URL env var.
- *  - Attaches Authorization: Bearer <token> from localStorage / cookies.
+ *  - Transmits HttpOnly session cookies via credentials: "include".
  *  - Sets Content-Type: application/json for mutation requests.
  *  - Returns parsed JSON responses.
  *  - Throws structured { success: false, message: string } on errors.
  */
 
-const API_BASE_URL =
-  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api";
+const rawBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = rawBase.replace(/\/api\/?$/, "") + "/api";
 
 /**
- * Retrieve the stored JWT token from localStorage or the auth_token cookie.
+ * Retrieve the stored JWT token from auth_token cookie if available.
  */
 function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-
-  // Prefer localStorage token
-  const ls = localStorage.getItem("authToken");
-  if (ls) return ls;
-
-  // Fallback to cookie
   const match = document.cookie.match(/(?:^|;\s*)auth_token=([^;]*)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
@@ -52,6 +46,7 @@ export async function adminFetch<T = unknown>(
   const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
 
   const res = await fetch(url, {
+    credentials: "include",
     ...options,
     headers: buildHeaders(options.headers),
   });

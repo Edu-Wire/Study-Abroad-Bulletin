@@ -45,7 +45,7 @@ function UtilityBar({
   useEffect(() => {
     setDate(formatEditionDate());
     if (typeof window !== "undefined") {
-      setIsLoggedIn(!!localStorage.getItem("authToken"));
+      setIsLoggedIn(!!localStorage.getItem("authUser") || document.cookie.includes("auth_token="));
     }
   }, []);
 

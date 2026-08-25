@@ -30,12 +30,8 @@ export default function LoginPage() {
       const res = await apiLogin(formData);
       if (res.success && res.token) {
         if (typeof window !== "undefined") {
-          localStorage.setItem("authToken", res.token);
           if (res.user) {
             localStorage.setItem("authUser", JSON.stringify(res.user));
-            // Set cookie for Next.js server middleware
-            document.cookie = `auth_token=${res.token}; path=/; max-age=604800; SameSite=Lax`;
-            document.cookie = `auth_role=${res.user.role || "STUDENT"}; path=/; max-age=604800; SameSite=Lax`;
           }
         }
 
