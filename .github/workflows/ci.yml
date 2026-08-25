@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "deep-project-audit"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: abroad_bulletin_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/abroad_bulletin_test
+      # Test-only values. Real secrets never live in the repository.
+      SESSION_HASH_SECRET: ci-session-hash-secret-value-not-used-in-production
+      BFF_SHARED_SECRET: ci-bff-shared-secret-value-not-used-in-production
+      BACKEND_URL: http://127.0.0.1:8000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Prisma Client must exist before TypeScript sees any import of it.
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      # Reported for review rather than gating the build: a transitive advisory
+      # with no patched release must not block an unrelated change.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev || true
