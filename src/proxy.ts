@@ -57,10 +57,10 @@ async function verifyJwt(token: string, secret: string): Promise<JwtPayload | nu
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Only run middleware on /admin routes
+  // Only run proxy on /admin routes
   if (pathname.startsWith("/admin")) {
     const token = request.cookies.get("auth_token")?.value;
 
@@ -72,7 +72,7 @@ export async function middleware(request: NextRequest) {
 
     const secret = process.env.JWT_SECRET;
     if (!secret) {
-      console.error("[Middleware] Missing JWT_SECRET environment variable.");
+      console.error("[Proxy] Missing JWT_SECRET environment variable.");
       const loginUrl = new URL("/auth/login", request.url);
       return NextResponse.redirect(loginUrl);
     }
