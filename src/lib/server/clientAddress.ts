@@ -6,98 +6,107 @@
  * only as trustworthy as the hop that produced it, which is why this module
  * exists rather than relaying a client-supplied header verbatim.
  *
- * `X-Forwarded-For` arrives as a chain: `client, proxy1, proxy2`. Everything a
- * client sends is prepended by each subsequent proxy, so entries on the LEFT
- * are the least trustworthy and entries on the RIGHT were added by
- * infrastructure we control. Taking the leftmost entry — the common mistake —
- * lets any caller forge an address and evade or poison a rate limiter.
- *
- * We therefore count inward from the right by the number of proxies actually in
- * front of this app, configured via TRUSTED_PROXY_HOP_COUNT.
+ * The chain-selection rule lives in ./forwardedFor.ts so it can be tested
+ * directly; this module supplies the environment and the logging.
  */
 
 import "server-only";
+import {
+  isPlausibleAddress,
+  parseForwardedForChain,
+  parseHopCount,
+  selectClientAddress,
+} from "./forwardedFor";
+
+/** Warn once per process rather than on every request. */
+let warnedAboutMissingHopCount = false;
+let warnedAboutInvalidHopCount = false;
+let warnedAboutShortChain = false;
 
 /**
  * Number of trusted reverse proxies / load balancers in front of Next.js.
  *
- * 0  — Next.js is reached directly (local development). Ignore XFF entirely.
- * 1  — one managed proxy or CDN appends the real client address (typical).
- * 2+ — a chain, e.g. CDN in front of a platform load balancer.
+ * Set this from the VERIFIED topology, not a guess. The two error directions are
+ * not symmetric:
  *
- * A wrong value fails safe in one direction only: too high yields an address
- * from deeper in the chain (over-grouping requests), never a client-forged one.
+ * - Too HIGH is unsafe. It reaches left past the entries our proxies appended,
+ *   into the client-controlled part of the header, letting a caller forge an
+ *   address and evade or poison IP-based rate limits. `selectClientAddress`
+ *   rejects the clearest case — a chain shorter than the configured count — but
+ *   a too-high value combined with a padded chain is indistinguishable from a
+ *   genuine one.
+ * - Too LOW is merely inaccurate. It reads an address our own infrastructure
+ *   appended, which groups legitimate users together but is never forgeable.
+ *
+ * When in doubt, prefer the lower value.
+ *
+ * 0  — Next.js is reached directly. X-Forwarded-For is ignored entirely.
+ * 1  — one managed proxy or CDN appends the real client address.
+ * 2+ — a chain, e.g. a CDN in front of a platform load balancer.
  */
 function trustedHopCount(): number {
-  const raw = process.env.TRUSTED_PROXY_HOP_COUNT;
-  if (raw === undefined) {
-    // Default to 1 in production, where a TLS-terminating proxy is a given,
-    // and 0 in development, where Next.js is usually hit directly.
-    return process.env.NODE_ENV === "production" ? 1 : 0;
-  }
+  const parsed = parseHopCount(process.env.TRUSTED_PROXY_HOP_COUNT);
 
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    console.warn(
-      `[bff] TRUSTED_PROXY_HOP_COUNT="${raw}" is not a non-negative integer; treating it as 0.`
-    );
+  if (parsed === null) {
+    const raw = process.env.TRUSTED_PROXY_HOP_COUNT;
+    const isAbsent = raw === undefined || raw.trim() === "";
+
+    // Default to trusting no header rather than assuming a topology we have not
+    // verified. Guessing 1 here would silently trust X-Forwarded-For on a
+    // deployment reached directly, handing every caller a forgeable identity.
+    // The cost is that rate limits group proxied users together — an
+    // availability trade-off, not a security hole.
+    if (isAbsent) {
+      if (process.env.NODE_ENV === "production" && !warnedAboutMissingHopCount) {
+        warnedAboutMissingHopCount = true;
+        console.warn(
+          "[bff] TRUSTED_PROXY_HOP_COUNT is not set. X-Forwarded-For will be " +
+            "ignored and rate limits will group all proxied users together. Set " +
+            "it to the verified number of trusted proxies in front of this app."
+        );
+      }
+    } else if (!warnedAboutInvalidHopCount) {
+      warnedAboutInvalidHopCount = true;
+      console.warn(
+        `[bff] TRUSTED_PROXY_HOP_COUNT="${raw}" is not a non-negative integer; ` +
+          "ignoring X-Forwarded-For."
+      );
+    }
+
     return 0;
   }
+
   return parsed;
 }
 
 /**
  * Resolve the caller's address, or null when it cannot be established.
  *
- * Returning null is meaningful: it tells Express to fall back to grouping by
- * something other than a forged address, rather than trusting a guess.
+ * Returning null is meaningful: it tells Express to fall back to the socket
+ * address rather than trusting a guess.
  */
 export function resolveClientAddress(headers: Headers): string | null {
   const hops = trustedHopCount();
+  if (hops === 0) return null;
 
-  if (hops === 0) {
-    // No trusted proxy, so no header can be believed. Express will fall back to
-    // the socket address, which is correct in a direct-connection setup.
+  const chain = parseForwardedForChain(headers.get("x-forwarded-for"));
+  if (chain.length === 0) return null;
+
+  if (chain.length < hops) {
+    if (!warnedAboutShortChain) {
+      warnedAboutShortChain = true;
+      console.warn(
+        `[bff] X-Forwarded-For carries ${chain.length} entr` +
+          `${chain.length === 1 ? "y" : "ies"} but TRUSTED_PROXY_HOP_COUNT is ` +
+          `${hops}. Refusing to trust it — verify the proxy topology. Falling ` +
+          "back to the socket address."
+      );
+    }
     return null;
   }
 
-  const forwardedFor = headers.get("x-forwarded-for");
-  if (!forwardedFor) return null;
-
-  const chain = forwardedFor
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  if (chain.length === 0) return null;
-
-  // Count inward from the right: the last entry was appended by our own
-  // outermost proxy, so with N trusted hops the client sits at index
-  // length - N. Clamp to 0 so a shorter-than-expected chain degrades to the
-  // leftmost entry rather than reading out of bounds.
-  const index = Math.max(0, chain.length - hops);
-  const candidate = chain[index] ?? chain[0];
+  const candidate = selectClientAddress(chain, hops);
+  if (!candidate) return null;
 
   return isPlausibleAddress(candidate) ? candidate : null;
-}
-
-/**
- * Reject values that are not addresses at all.
- *
- * This is a sanity filter, not validation of ownership: an attacker positioned
- * to append to the trusted portion of the chain is already inside the
- * perimeter. It stops header-injection oddities from becoming limiter keys.
- */
-function isPlausibleAddress(value: string): boolean {
-  if (!value || value.length > 45) return false;
-
-  // IPv4, optionally with a port.
-  if (/^\d{1,3}(\.\d{1,3}){3}(:\d{1,5})?$/.test(value)) return true;
-
-  // IPv6, bracketed or bare.
-  if (/^\[?[0-9a-fA-F:]+\]?(:\d{1,5})?$/.test(value) && value.includes(":")) {
-    return true;
-  }
-
-  return false;
 }

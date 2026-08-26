@@ -59,6 +59,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # eslint exits 0 on warnings, so warning count could creep up unnoticed.
+      # This fails when any rule exceeds its committed baseline.
+      - name: Lint baseline (no new warnings)
+        run: npm run lint:baseline
+
       - name: Test
         run: npm test
 
@@ -74,7 +79,11 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      # Reported for review rather than gating the build: a transitive advisory
-      # with no patched release must not block an unrelated change.
+      # Now gating: production dependencies are clean, so a new high-severity
+      # advisory should stop a merge rather than scroll past in a log. Moderate
+      # and low findings are still reported without failing.
       - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Report all production advisories
+        if: always()
         run: npm audit --omit=dev || true

@@ -31,7 +31,9 @@ const serverSource = readFileSync(
 
 async function withServer(configure) {
   const app = express();
-  app.set("trust proxy", true);
+  // Deliberately NOT `app.set("trust proxy", true)`: production keeps it off,
+  // and enabling it here would both model the wrong thing and trip
+  // express-rate-limit's ERR_ERL_PERMISSIVE_TRUST_PROXY validator.
   configure(app);
   const server = await new Promise((resolve) => {
     const s = app.listen(0, () => resolve(s));

@@ -151,3 +151,35 @@ test("the CI workflow generates Prisma Client before typechecking", () => {
     "prisma generate must precede typecheck, or the client types are missing"
   );
 });
+
+// ---------------------------------------------------------------------------
+// Dependency advisories
+// ---------------------------------------------------------------------------
+
+test("the deepmerge-ts advisory is pinned forward, not fixed by downgrading Prisma", () => {
+  const pkg = JSON.parse(
+    readFileSync(path.join(repoRoot, "package.json"), "utf8")
+  );
+
+  // npm's suggested remedy for GHSA-ggr8-5vv4-36mx is `prisma@6.12.0`, a major
+  // downgrade. The plan forbids that, so the transitive dependency is pinned
+  // to its patched release instead.
+  assert.ok(
+    pkg.overrides?.["deepmerge-ts"],
+    "expected a deepmerge-ts override pinning the patched release"
+  );
+  assert.match(pkg.overrides["deepmerge-ts"], /^\^?8\./, "must resolve to >=8");
+
+  assert.ok(
+    pkg.overridesRationale?.["deepmerge-ts"],
+    "an override needs a recorded reason and a removal condition"
+  );
+
+  // Prisma itself must stay on 7.x.
+  const prismaRange = pkg.dependencies?.prisma ?? "";
+  assert.match(
+    prismaRange,
+    /^\^?7\./,
+    `Prisma must not be downgraded to satisfy an advisory (found "${prismaRange}")`
+  );
+});

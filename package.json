@@ -18,10 +18,18 @@
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:migrate:deploy": "prisma migrate deploy",
-    "db:preflight:duplicates": "tsx prisma/preflight-duplicates.ts"
+    "db:preflight:duplicates": "tsx prisma/preflight-duplicates.ts",
+    "lint:baseline": "node scripts/lint-baseline.mjs",
+    "lint:baseline:update": "node scripts/lint-baseline.mjs --update"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "overridesRationale": {
+    "deepmerge-ts": "GHSA-ggr8-5vv4-36mx (high): stack exhaustion in deepmerge-ts <8.0.0. Reached only via prisma -> @prisma/config, which uses it to load prisma.config.ts at CLI/build time, not in request-serving code. @prisma/config still pins 7.1.5 as of 7.10.0, so no Prisma upgrade resolves it; npm's suggested remedy is a downgrade to prisma@6.12.0, which we reject. Pinning the patched release directly instead. Remove this override once @prisma/config depends on deepmerge-ts >=8."
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

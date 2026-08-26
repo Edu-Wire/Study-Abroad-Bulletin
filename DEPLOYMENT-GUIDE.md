@@ -45,9 +45,31 @@ real client address, which in turn is what the API's rate limiters bucket on.
 - `2+` — a chain, for example a CDN in front of a platform load balancer.
 
 Counting is done from the **right** of the header, because a client can prepend
-anything it likes to the left. Setting this too high groups more users into one
-bucket; it can never let a client forge an address. Setting it too low is the
-dangerous direction, so verify it after any change to the hosting topology.
+anything it likes to the left.
+
+**The two error directions are not symmetric. Set this from the verified
+topology, never a guess:**
+
+- **Too high is unsafe.** It reaches left past the entries your proxies appended,
+  into the client-controlled part of the header, letting a caller forge an
+  address and evade or poison IP-based rate limits. The app rejects the clearest
+  case — a chain shorter than the configured count — and logs a warning, but a
+  too-high value combined with a padded chain cannot be distinguished from a
+  genuine one.
+- **Too low is merely inaccurate.** It reads an address your own infrastructure
+  appended, grouping legitimate users together. Never forgeable.
+
+When in doubt, prefer the lower value. If the variable is unset or malformed the
+app trusts no header at all and logs a warning, which is safe but groups every
+proxied user into one rate-limit bucket.
+
+To verify the real value, log the raw header from your proxy for a known client
+and count how many entries your infrastructure appends:
+
+```text
+X-Forwarded-For: <client>, <proxy-1>, <proxy-2>
+                            ^^^^^^^^^^^^^^^^^^^  TRUSTED_PROXY_HOP_COUNT = 2
+```
 
 ### Express server
 
