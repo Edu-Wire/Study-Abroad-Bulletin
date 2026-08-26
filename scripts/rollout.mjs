@@ -194,8 +194,14 @@ console.log(
 
 heading("Rollout complete");
 console.log(
-  "Still outstanding, deliberately not automated:\n" +
-    "  - Rotate the legacy JWT_SECRET (and remove it from the environment).\n" +
-    "  - Set TRUSTED_PROXY_HOP_COUNT from your verified proxy topology.\n" +
-    "  - Remove backend/src/config/jwt.js and the jsonwebtoken dependency.\n"
+  "Remaining manual step:\n" +
+    "  - Delete JWT_SECRET and NEXT_PUBLIC_API_URL from every environment,\n" +
+    "    including the frontend host's build configuration. No code reads\n" +
+    "    either one, so this is cleanup rather than a migration.\n" +
+    "\n" +
+    "Confirm the deployment environment carries:\n" +
+    "  - BACKEND_URL, BFF_SHARED_SECRET, TRUSTED_PROXY_HOP_COUNT (Next.js)\n" +
+    "  - DATABASE_URL, SESSION_HASH_SECRET, BFF_SHARED_SECRET (Express)\n" +
+    "  BFF_SHARED_SECRET must be byte-identical on both sides, or every API\n" +
+    "  call returns 403.\n"
 );
