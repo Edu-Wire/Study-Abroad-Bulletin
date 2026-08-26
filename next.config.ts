@@ -48,7 +48,13 @@ const securityHeaders = [
 if (isProduction) {
   securityHeaders.push({
     key: "Strict-Transport-Security",
-    value: "max-age=63072000; includeSubDomains; preload",
+    // Deliberately no `includeSubDomains` and no `preload`. This application is
+    // hosting-agnostic and does not necessarily own every subdomain of the host
+    // it is deployed under; asserting HTTPS on their behalf could break them,
+    // and `preload` is effectively irreversible once submitted. Add both only
+    // for a deployment that genuinely controls the whole domain and intends to
+    // serve every subdomain over HTTPS permanently.
+    value: "max-age=63072000",
   });
 }
 

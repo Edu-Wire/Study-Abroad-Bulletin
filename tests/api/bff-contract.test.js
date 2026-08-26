@@ -228,11 +228,14 @@ test("admin roles are exactly EDITOR, ADMIN, SUPER_ADMIN", () => {
 });
 
 test("server-only modules are marked server-only", () => {
-  for (const module of ["src/lib/server/backendConfig.ts", "src/lib/server/session.ts"]) {
+  for (const modulePath of [
+    "src/lib/server/backendConfig.ts",
+    "src/lib/server/session.ts",
+  ]) {
     assert.match(
-      read(module),
+      read(modulePath),
       /import "server-only"/,
-      `${module} must be unimportable from a Client Component`
+      `${modulePath} must be unimportable from a Client Component`
     );
   }
 });

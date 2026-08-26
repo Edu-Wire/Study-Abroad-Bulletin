@@ -1,4 +1,15 @@
 import rateLimit from "express-rate-limit";
+import { clientKeyGenerator } from "./bff.js";
+
+/**
+ * All limiters key on the address the trusted BFF reported, falling back to the
+ * socket address. Without this every request would arrive from the Next.js
+ * server and share one bucket, letting a single caller exhaust the limit for
+ * everyone — a denial of service rather than a protection.
+ *
+ * `trust proxy` is intentionally left off; see clientKeyGenerator.
+ */
+const keyGenerator = clientKeyGenerator;
 
 /**
  * Strict Rate Limiter for Authentication endpoints (/api/login, /api/signup)
@@ -7,6 +18,7 @@ import rateLimit from "express-rate-limit";
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // Limit each IP to 10 requests per windowMs
+  keyGenerator,
   standardHeaders: "draft-7", // Return standard `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   statusCode: 429,
@@ -23,6 +35,7 @@ export const authLimiter = rateLimit({
 export const adminMutationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
+  keyGenerator,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   statusCode: 429,
@@ -39,6 +52,7 @@ export const adminMutationLimiter = rateLimit({
 export const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  keyGenerator,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   statusCode: 429,

@@ -1,7 +1,17 @@
 import crypto from "crypto";
+import { ipKeyGenerator } from "express-rate-limit";
 import { BFF_SHARED_SECRET } from "../config/session.js";
 
 const BFF_HEADER = "x-bff-secret";
+
+/**
+ * Client address as reported by the trusted BFF.
+ *
+ * Deliberately not `x-forwarded-for`: this value is believed only on requests
+ * that also carry a valid X-BFF-Secret, so it cannot be set by an arbitrary
+ * caller. See clientKeyGenerator below.
+ */
+const CLIENT_ADDRESS_HEADER = "x-bff-client-address";
 
 /**
  * Paths reachable without the BFF shared secret.
@@ -46,7 +56,55 @@ export function requireBffSecret(req, res, next) {
     });
   }
 
+  // The shared secret has now been verified, which is precisely what makes the
+  // accompanying client-address header believable. Promote it to a trusted
+  // value for the rate limiters downstream.
+  //
+  // Order matters: this runs only after the secret check above, so an untrusted
+  // caller can never reach the assignment and seed a value of their choosing.
+  const claimed = req.headers[CLIENT_ADDRESS_HEADER];
+  if (typeof claimed === "string" && claimed.length > 0 && claimed.length <= 45) {
+    req.trustedClientAddress = claimed;
+  }
+
   next();
 }
 
-export { BFF_HEADER };
+/**
+ * Rate-limit key for a request.
+ *
+ * Prefers the address the trusted BFF reported. Falls back to the socket
+ * address, which is correct when Express is reached directly (health probes,
+ * local development).
+ *
+ * `trust proxy` is deliberately NOT enabled: it would make Express believe any
+ * X-Forwarded-For it receives, including one a client forged, which is exactly
+ * the bypass express-rate-limit warns about.
+ */
+export function clientKeyGenerator(req) {
+  const address = req.trustedClientAddress ?? req.ip ?? req.socket?.remoteAddress;
+  if (!address) {
+    // No identity available: group these together rather than exempting them.
+    return "unknown";
+  }
+
+  // Strip a trailing port only for IPv4 (`1.2.3.4:5678`) and for the bracketed
+  // IPv6 form (`[::1]:5678`). A bare IPv6 address is left intact, since its
+  // colons are part of the address, not a port.
+  const raw = String(address).trim();
+  let host = raw;
+
+  const bracketed = raw.match(/^\[(.+)\](?::\d+)?$/);
+  if (bracketed) {
+    host = bracketed[1];
+  } else if (/^\d{1,3}(\.\d{1,3}){3}:\d+$/.test(raw)) {
+    host = raw.slice(0, raw.lastIndexOf(":"));
+  }
+
+  // ipKeyGenerator normalises IPv4-mapped IPv6 and groups IPv6 into a subnet,
+  // so a client holding a large IPv6 range cannot rotate addresses to get a
+  // fresh bucket per request.
+  return ipKeyGenerator(host);
+}
+
+export { BFF_HEADER, CLIENT_ADDRESS_HEADER };

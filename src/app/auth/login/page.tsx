@@ -33,10 +33,19 @@ export default function LoginPage() {
       // and nothing for this page to persist.
       if (res.success) {
         const role = res.user?.role;
-        if (role === "SUPER_ADMIN" || role === "ADMIN" || role === "EDITOR") {
-          router.push("/admin");
+        const destination =
+          role === "SUPER_ADMIN" || role === "ADMIN" || role === "EDITOR"
+            ? "/admin"
+            : "/dashboard";
+
+        // An administrator-issued temporary password must be replaced before
+        // anything else; Express refuses privileged routes until it is.
+        if (res.user?.mustChangePassword) {
+          router.push(
+            `/auth/change-password?required=1&redirect=${encodeURIComponent(destination)}`
+          );
         } else {
-          router.push("/dashboard");
+          router.push(destination);
         }
         // Ensure server components re-resolve the new session.
         router.refresh();

@@ -127,8 +127,18 @@ export function requirePasswordChanged(req, res, next) {
 // Convenient role preset middleware chains (use as arrays in route handlers)
 // ---------------------------------------------------------------------------
 
-/** Any authenticated user (any role). */
+/**
+ * Any authenticated user (any role), regardless of password state.
+ *
+ * Use only for endpoints the password-change flow itself depends on:
+ * /api/me, /api/logout, /api/logout-all, /api/password/change. Everything
+ * else should use `requireSettledAuth` so a temporary password grants no
+ * ordinary access.
+ */
 export const requireAuth = [authenticate];
+
+/** Any authenticated user whose password is their own. */
+export const requireSettledAuth = [authenticate, requirePasswordChanged];
 
 /** EDITOR and above, with a settled password. */
 export const requireEditor = [

@@ -29,6 +29,8 @@ jobs:
       SESSION_HASH_SECRET: ci-session-hash-secret-value-not-used-in-production
       BFF_SHARED_SECRET: ci-bff-shared-secret-value-not-used-in-production
       BACKEND_URL: http://127.0.0.1:8000
+      # No proxy in front of the app under test.
+      TRUSTED_PROXY_HOP_COUNT: "0"
 
     steps:
       - uses: actions/checkout@v4

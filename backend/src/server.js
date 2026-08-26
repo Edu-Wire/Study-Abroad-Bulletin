@@ -21,6 +21,7 @@ import {
   requireEditor,
   requireAdmin,
   requireSuperAdmin,
+  requireSettledAuth,
   authenticate,
   getSessionToken,
 } from "./middleware/auth.js";
@@ -413,7 +414,7 @@ app.get("/api/me", ...requireAuth, async (req, res) => {
  * @desc    Get current authenticated student's profile & preferences
  * @access  Authenticated User (STUDENT, etc.)
  */
-app.get("/api/student/profile", ...requireAuth, async (req, res) => {
+app.get("/api/student/profile", ...requireSettledAuth, async (req, res) => {
   try {
     const profile = await prisma.studentProfile.findUnique({
       where: { userId: req.user.id },
@@ -439,7 +440,7 @@ app.get("/api/student/profile", ...requireAuth, async (req, res) => {
  */
 app.put(
   "/api/student/profile",
-  ...requireAuth,
+  ...requireSettledAuth,
   adminMutationLimiter,
   validateRequest({ body: StudentProfileSchema }),
   async (req, res) => {
@@ -497,7 +498,7 @@ app.put(
  * @desc    Get personalized recommendation feed (articles, scholarships, deadlines)
  * @access  Authenticated User (STUDENT, etc.)
  */
-app.get("/api/student/feed", ...requireAuth, async (req, res) => {
+app.get("/api/student/feed", ...requireSettledAuth, async (req, res) => {
   try {
     // Identity is derived strictly from verified req.user.id
     const recommendations = await getPersonalizedRecommendations(req.user.id);

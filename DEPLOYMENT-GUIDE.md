@@ -31,7 +31,23 @@ Never commit any of these. Set them through your host's secret configuration.
 ```text
 BACKEND_URL=https://api.internal-or-public-host
 BFF_SHARED_SECRET=<32+ char random secret, identical to the Express value>
+TRUSTED_PROXY_HOP_COUNT=1
 ```
+
+`TRUSTED_PROXY_HOP_COUNT` is how many trusted reverse proxies or CDNs sit in
+front of Next.js. It decides which entry of `X-Forwarded-For` is believed as the
+real client address, which in turn is what the API's rate limiters bucket on.
+
+- `0` — Next.js is reached directly (local development). `X-Forwarded-For` is
+  ignored entirely.
+- `1` — one managed proxy or CDN appends the client address. This is the default
+  in production and the common case.
+- `2+` — a chain, for example a CDN in front of a platform load balancer.
+
+Counting is done from the **right** of the header, because a client can prepend
+anything it likes to the left. Setting this too high groups more users into one
+bucket; it can never let a client forge an address. Setting it too low is the
+dangerous direction, so verify it after any change to the hosting topology.
 
 ### Express server
 
@@ -168,8 +184,12 @@ Demo accounts are created only outside production and only when
 ### Staff accounts
 
 Invite staff through the admin UI rather than the seed. An invited user receives
-a generated temporary password and is flagged `mustChangePassword`, which blocks
-privileged routes until they set their own password.
+a generated temporary password and is flagged `mustChangePassword`.
+
+On first sign-in they are redirected to `/auth/change-password`, and until they
+set their own password the API allows only the password-change, session, and
+logout endpoints. Administrative resets set the same flag, so a password an
+administrator knows always has to be replaced by its owner.
 
 ## Reverse proxy
 
@@ -200,7 +220,15 @@ server {
 }
 ```
 
-`X-Forwarded-For` matters: the API rate limiters key on client address.
+`X-Forwarded-For` matters: it is how the client address reaches Next.js, which
+then reports it to the API for rate limiting. Confirm the proxy **appends** to
+this header rather than overwriting it, and set `TRUSTED_PROXY_HOP_COUNT` to
+match the number of proxies in front of Next.js.
+
+Note that Express itself does **not** enable `trust proxy`. It receives the
+client address in a dedicated header from the BFF, believed only because the
+same request carried a valid `X-BFF-Secret`. Enabling `trust proxy` would make
+Express accept any `X-Forwarded-For` it is given, including a forged one.
 
 After editing:
 
@@ -245,6 +273,10 @@ Then confirm in a browser:
 - `/auth/login` — logging in reaches `/admin` with no redirect loop.
 - A student account cannot render `/admin`; it redirects to `/dashboard`.
 - Logout returns to the login page, and `/admin` no longer renders afterwards.
+- An invited staff member is sent to `/auth/change-password` on first sign-in and
+  reaches `/admin` only after saving a new password.
+- Rate limiting buckets per client, not globally: exhausting login attempts from
+  one address must not lock out a second address.
 - DevTools: the session cookie is `HttpOnly`, and no token, role, or backend URL
   appears in `localStorage`, `sessionStorage`, or any readable cookie.
 

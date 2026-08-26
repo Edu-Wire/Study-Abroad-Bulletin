@@ -7,11 +7,17 @@ import express from "express";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import {
-  authLimiter,
-  adminMutationLimiter,
-  generalApiLimiter,
-} from "../../backend/src/middleware/rateLimiter.js";
+// The limiters key on the trusted-BFF client address, so importing them pulls
+// in the session config, which fails fast on a weak secret. Set test values
+// before that import runs.
+process.env.SESSION_HASH_SECRET =
+  process.env.SESSION_HASH_SECRET ?? "test-session-hash-secret-".padEnd(48, "x");
+process.env.BFF_SHARED_SECRET =
+  process.env.BFF_SHARED_SECRET ?? "test-bff-shared-secret-".padEnd(48, "y");
+
+const { authLimiter, adminMutationLimiter, generalApiLimiter } = await import(
+  "../../backend/src/middleware/rateLimiter.js"
+);
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const serverSource = readFileSync(

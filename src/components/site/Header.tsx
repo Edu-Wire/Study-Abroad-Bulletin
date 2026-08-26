@@ -40,21 +40,26 @@ function UtilityBar({
   onSearchClick: () => void;
   searchOpen: boolean;
 }) {
-  const [date, setDate] = useState("");
+  // Rendered after mount only, so the server and client markup agree on a date
+  // that depends on the viewer's clock.
+  const [mounted, setMounted] = useState(false);
+  const date = mounted ? formatEditionDate() : "";
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    setDate(formatEditionDate());
-
     // The session cookie is HttpOnly, so it cannot be sniffed from JavaScript.
     // Ask the server instead; this drives presentation only.
     let cancelled = false;
+
     getCurrentUser()
       .then((res) => {
         if (!cancelled) setIsLoggedIn(Boolean(res.success && res.user));
       })
       .catch(() => {
         if (!cancelled) setIsLoggedIn(false);
+      })
+      .finally(() => {
+        if (!cancelled) setMounted(true);
       });
 
     return () => {
@@ -371,6 +376,7 @@ export function Header() {
   }, [menuOpen]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
     setMenuOpen(false);
     setSearchOpen(false);
     setScrolled(window.scrollY > 8);

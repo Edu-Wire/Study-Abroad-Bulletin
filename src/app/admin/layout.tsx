@@ -38,5 +38,12 @@ export default async function AdminLayout({
     redirect("/dashboard");
   }
 
+  // An administrator-issued temporary password must be replaced first. Express
+  // already refuses this user's privileged API calls, so rendering the admin
+  // shell would only produce a page whose every request fails.
+  if (user.mustChangePassword) {
+    redirect("/auth/change-password?required=1&redirect=/admin");
+  }
+
   return <AdminShell>{children}</AdminShell>;
 }

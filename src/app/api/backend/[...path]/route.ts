@@ -16,6 +16,7 @@
 
 import type { NextRequest } from "next/server";
 import { getBackendUrl, getBffSharedSecret } from "@/lib/server/backendConfig";
+import { resolveClientAddress } from "@/lib/server/clientAddress";
 
 /** Never cache proxied API traffic. */
 export const dynamic = "force-dynamic";
@@ -129,9 +130,16 @@ async function handle(
   const cookie = request.headers.get("cookie");
   if (cookie) headers.set("cookie", cookie);
 
-  // Preserve the caller's address for rate limiting on the Express side.
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) headers.set("x-forwarded-for", forwardedFor);
+  // Tell Express who the real caller is, so its rate limiters bucket per user
+  // rather than lumping every request under the BFF's own address.
+  //
+  // This is a distinct header, NOT a relayed x-forwarded-for: Express trusts it
+  // only because X-BFF-Secret validated on the same request. Forwarding the
+  // client's own x-forwarded-for would let any caller forge an address.
+  const clientAddress = resolveClientAddress(request.headers);
+  if (clientAddress) {
+    headers.set("x-bff-client-address", clientAddress);
+  }
 
   const hasBody = !["GET", "HEAD"].includes(request.method);
 
