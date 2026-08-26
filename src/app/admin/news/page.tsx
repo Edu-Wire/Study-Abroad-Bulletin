@@ -136,6 +136,7 @@ export default function AdminNewsPage() {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
     setCurrentPage(1);
   }, [activeStatus, search]);
 

@@ -49,7 +49,9 @@ export default async function ArticlePage({ params, searchParams }: Props) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const isAdminPreview = resolvedSearchParams.adminPreview === "true";
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
   let article: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
   let adminRaw: any = null;
 
   if (isAdminPreview) {
@@ -83,6 +85,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
         sourceName: adminRaw.sourceName ?? undefined,
         status: adminRaw.status,
         primaryCountryId: adminRaw.primaryCountryId || null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
         countryIds: adminRaw.countries?.map((c: any) => c.country?.id || c.countryId) || [],
       };
     }

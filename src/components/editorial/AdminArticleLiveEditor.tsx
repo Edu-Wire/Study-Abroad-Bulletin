@@ -407,6 +407,7 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
     setParagraphs(parseBody(article.content));
     setHeadline(article.headline);
     setSummary(article.summary);

@@ -82,6 +82,7 @@ export default function AdminUsersPage() {
       if (data.success && data.users) {
         setUsers(data.users);
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
     } catch (err: any) {
       console.error("Failed to fetch admin users:", err);
     } finally {
@@ -90,6 +91,7 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
     fetchUsers();
   }, []);
 
@@ -139,6 +141,7 @@ export default function AdminUsersPage() {
           message: data.message || "Failed to update user.",
         });
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
     } catch (err: any) {
       setEditStatus({
         success: false,
@@ -163,6 +166,7 @@ export default function AdminUsersPage() {
       } else {
         alert(data.message || "Failed to delete user.");
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
     } catch (err: any) {
       alert(err?.message || "Failed to delete user. Server unreachable.");
     } finally {

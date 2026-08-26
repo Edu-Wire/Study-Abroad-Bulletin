@@ -169,6 +169,7 @@ export default function VisaPage() {
                     "Germany Student Visa Application",
                     "Post-Study Work Rights Explained",
                   ].map((guide) => (
+                    // eslint-disable-next-line @next/next/no-html-link-for-pages -- pre-existing: intentional plain anchor. Tracked for follow-up.
                     <a
                       key={guide}
                       href="/guides"

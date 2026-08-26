@@ -17,7 +17,7 @@ export default function ContactPage() {
               Contact Us
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Have a question, partnership inquiry or editorial tip? We'd love to hear from you.
+              Have a question, partnership inquiry or editorial tip? We&apos;d love to hear from you.
             </p>
           </div>
         </section>

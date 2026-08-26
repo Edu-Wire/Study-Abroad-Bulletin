@@ -86,7 +86,7 @@ export default async function GuideDetailPage({ params }: Props) {
 
                   <h2>Key Considerations</h2>
                   <p>
-                    Every student's situation is different. Use this guide as a starting
+                    Every student&apos;s situation is different. Use this guide as a starting
                     framework and always verify requirements directly with the institutions
                     or authorities you are applying to.
                   </p>
