@@ -6,7 +6,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
@@ -193,4 +193,61 @@ test("the deepmerge-ts advisory is pinned forward, not fixed by downgrading Pris
     /^\^?7\./,
     `Prisma must not be downgraded to satisfy an advisory (found "${prismaRange}")`
   );
+});
+
+// ---------------------------------------------------------------------------
+// Legacy JWT removal
+// ---------------------------------------------------------------------------
+
+test("the jsonwebtoken dependency is gone", () => {
+  const pkg = JSON.parse(
+    readFileSync(path.join(repoRoot, "package.json"), "utf8")
+  );
+
+  assert.ok(
+    !pkg.dependencies?.jsonwebtoken,
+    "jsonwebtoken must not be a production dependency"
+  );
+  assert.ok(
+    !pkg.devDependencies?.jsonwebtoken,
+    "jsonwebtoken must not be a dev dependency either"
+  );
+});
+
+test("the legacy JWT config module is deleted", () => {
+  assert.ok(
+    !existsSync(path.join(repoRoot, "backend/src/config/jwt.js")),
+    "backend/src/config/jwt.js was replaced by config/session.js"
+  );
+});
+
+test("no source file references a JWT secret or signing call", () => {
+  const roots = ["backend/src", "src/lib", "src/app", "prisma"];
+  const offenders = [];
+
+  const walk = (dir) => {
+    const full = path.join(repoRoot, dir);
+    if (!existsSync(full)) return;
+    for (const entry of readdirSync(full, { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(rel);
+      } else if (/\.(js|ts|tsx)$/.test(entry.name)) {
+        const source = readFileSync(path.join(repoRoot, rel), "utf8");
+        // Strip comments: the migration history is legitimately described.
+        const code = source
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .split("\n")
+          .filter((line) => !line.trim().startsWith("//") && !line.trim().startsWith("*"))
+          .join("\n");
+
+        if (/\bJWT_SECRET\b|jwt\.sign|jwt\.verify|require\(["']jsonwebtoken|from ["']jsonwebtoken/.test(code)) {
+          offenders.push(rel);
+        }
+      }
+    }
+  };
+
+  roots.forEach((r) => walk(r));
+  assert.deepEqual(offenders, [], "JWT support was removed and must not return");
 });

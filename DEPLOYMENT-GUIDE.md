@@ -34,6 +34,10 @@ BFF_SHARED_SECRET=<32+ char random secret, identical to the Express value>
 TRUSTED_PROXY_HOP_COUNT=1
 ```
 
+The value `1` matches the current deployment: AWS Amplify serves Next.js behind
+CloudFront, which appends the real client address as the last `X-Forwarded-For`
+entry. **Re-verify this if the hosting or CDN layer changes.**
+
 `TRUSTED_PROXY_HOP_COUNT` is how many trusted reverse proxies or CDNs sit in
 front of Next.js. It decides which entry of `X-Forwarded-For` is believed as the
 real client address, which in turn is what the API's rate limiters bucket on.
@@ -92,8 +96,14 @@ The Express server refuses to start if `SESSION_HASH_SECRET` or
 `BFF_SHARED_SECRET` is missing or shorter than 32 characters. This is
 intentional — it cannot run in an insecure state.
 
-`NEXT_PUBLIC_API_URL` and `JWT_SECRET` are no longer used. Remove them from
-every environment once the deployment below is complete.
+`NEXT_PUBLIC_API_URL` and `JWT_SECRET` are no longer used by any code — the
+`jsonwebtoken` dependency and `backend/src/config/jwt.js` have both been removed.
+Delete these two variables from every environment, including the frontend host's
+build configuration — a removed `NEXT_PUBLIC_API_URL` is one less public backend
+URL sitting in a build environment for no reason.
+
+Rotating the old `JWT_SECRET` is now a formality rather than a migration step:
+nothing reads it, so no session depends on it.
 
 ## Sessions
 
