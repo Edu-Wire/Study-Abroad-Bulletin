@@ -104,17 +104,28 @@ test("the deployment guide warns about the duplicate preflight", () => {
   assert.match(guide, /never deletes rows|aborts/i);
 });
 
-test("no .env file is tracked and env files are ignored", () => {
+test("no .env file is tracked and env files are ignored", async () => {
   const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8");
   assert.match(gitignore, /^\.env\*/m, ".env files must be git-ignored");
 
-  // A committed .env would be a live secret leak.
-  for (const candidate of [".env", ".env.local", ".env.production"]) {
-    assert.ok(
-      !existsSync(path.join(repoRoot, candidate)),
-      `${candidate} must not exist in the repository`
-    );
-  }
+  // A local .env is expected and necessary — developers and deployments need
+  // one. The security property is that git never TRACKS it, so check the index
+  // rather than the filesystem.
+  const { execFileSync } = await import("node:child_process");
+  const tracked = execFileSync(
+    "git",
+    ["ls-files", "--", ".env", ".env.*", "*/.env", "*/.env.*"],
+    { cwd: repoRoot, encoding: "utf8" }
+  )
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  assert.deepEqual(
+    tracked,
+    [],
+    "a tracked .env would leak live secrets into the repository"
+  );
 });
 
 test("package scripts cover the documented CI order", () => {
