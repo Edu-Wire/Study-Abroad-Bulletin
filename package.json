@@ -20,7 +20,9 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:preflight:duplicates": "tsx prisma/preflight-duplicates.ts",
     "lint:baseline": "node scripts/lint-baseline.mjs",
-    "lint:baseline:update": "node scripts/lint-baseline.mjs --update"
+    "lint:baseline:update": "node scripts/lint-baseline.mjs --update",
+    "db:rollout": "node scripts/rollout.mjs",
+    "db:rollout:apply": "node scripts/rollout.mjs --apply"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
