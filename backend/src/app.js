@@ -3,7 +3,6 @@ import cors from "cors";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { XMLParser } from "fast-xml-parser";
-import { connectDB } from "./config/db.js";
 import { prisma } from "./config/prisma.js";
 import {
   SESSION_COOKIE_NAME,
@@ -49,9 +48,7 @@ import {
 } from "./validators/index.js";
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
 
-const app = express();
-const PORT = process.env.PORT || 8000;
-
+const app = express();`r`n
 // Allowed origins for CORS with credentials
 const allowedOrigins = [
   "http://localhost:3000",
@@ -1607,19 +1604,4 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", database: "PostgreSQL abroad_bulletin", serverTime: new Date() });
 });
 
-/**
- * Fail-fast server startup: only listen after database connection is verified
- */
-async function startServer() {
-  const isConnected = await connectDB();
-  if (!isConnected) {
-    console.error("❌ Fatal: PostgreSQL database connection failed. Halting server startup.");
-    process.exit(1);
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Authentication Backend Server running on http://localhost:${PORT}`);
-  });
-}
-
-startServer();
+export default app;

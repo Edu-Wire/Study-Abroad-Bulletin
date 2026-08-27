@@ -106,7 +106,7 @@ test("the dashboard redirects a flagged user server-side", () => {
 // ---------------------------------------------------------------------------
 
 test("the password-change endpoint is reachable while flagged", () => {
-  const server = read("backend/src/server.js");
+  const server = read("backend/src/app.js");
   const section = server.slice(server.indexOf('"/api/password/change"'));
   const chain = section.slice(0, section.indexOf("async (req, res)"));
 
@@ -120,7 +120,7 @@ test("the password-change endpoint is reachable while flagged", () => {
 });
 
 test("session endpoints the flow needs stay reachable while flagged", () => {
-  const server = read("backend/src/server.js");
+  const server = read("backend/src/app.js");
 
   // /api/me drives the UI, /api/logout-all backs the escape hatch. Both use
   // requireAuth, which does not check the flag.
@@ -133,7 +133,7 @@ test("session endpoints the flow needs stay reachable while flagged", () => {
 });
 
 test("ordinary data routes are gated on a settled password", () => {
-  const server = read("backend/src/server.js");
+  const server = read("backend/src/app.js");
 
   for (const route of ["/api/student/profile", "/api/student/feed"]) {
     const at = server.indexOf(`"${route}"`);
@@ -197,7 +197,7 @@ test("Express selects mustChangePassword when loading the user", () => {
 });
 
 test("changing the password clears the flag", () => {
-  const server = read("backend/src/server.js");
+  const server = read("backend/src/app.js");
   const section = server.slice(server.indexOf('"/api/password/change"'));
   assert.match(
     section,
