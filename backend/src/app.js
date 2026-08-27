@@ -47,8 +47,10 @@ import {
   PasswordChangeSchema,
 } from "./validators/index.js";
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
+import countriesPublicRouter from "./modules/countries/countries.routes.js";
 
-const app = express();`r`n
+const app = express();
+
 // Allowed origins for CORS with credentials
 const allowedOrigins = [
   "http://localhost:3000",
@@ -81,6 +83,8 @@ app.use("/api", serviceQuotaLimiter);
 // Baseline ceiling on all API traffic. Endpoint-specific limiters below are
 // stricter; this catches everything else, including read-heavy scraping.
 app.use("/api", generalApiLimiter);
+
+app.use("/api/countries/public", countriesPublicRouter);
 
 // Cookie configuration for opaque session tokens.
 export const AUTH_COOKIE_OPTIONS = {

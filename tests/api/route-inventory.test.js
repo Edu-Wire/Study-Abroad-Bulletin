@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const APP_SOURCE = fs.readFileSync(path.join(ROOT, "backend/src/app.js"), "utf8");
+const COUNTRIES_ROUTES_SOURCE = fs.readFileSync(
+  path.join(ROOT, "backend/src/modules/countries/countries.routes.js"),
+  "utf8"
+);
 
 const EXPECTED_ROUTES = [
   "POST /api/signup",
@@ -30,20 +34,28 @@ const EXPECTED_ROUTES = [
   "GET /api/admin/rss/preview",
   "POST /api/admin/articles/import-rss",
   "GET /api/health",
+  "GET /api/countries/public/",
+  "GET /api/countries/public/:slug",
 ];
 
-function readRouteInventory(source) {
+function readRouteInventory(source, prefix = "") {
   const routes = [];
-  const routePattern = /app\.(get|post|put|patch|delete)\(\s*["']([^"']+)["']/g;
+  const routePattern = /(?:app|router)\.(get|post|put|patch|delete)\(\s*["']([^"']+)["']/g;
   let match;
 
   while ((match = routePattern.exec(source)) !== null) {
-    routes.push(`${match[1].toUpperCase()} ${match[2]}`);
+    routes.push(`${match[1].toUpperCase()} ${prefix}${match[2]}`);
   }
 
   return routes;
 }
 
 test("Express route inventory remains unchanged during app extraction", () => {
-  assert.deepEqual(readRouteInventory(APP_SOURCE), EXPECTED_ROUTES);
+  assert.deepEqual(
+    [
+      ...readRouteInventory(APP_SOURCE),
+      ...readRouteInventory(COUNTRIES_ROUTES_SOURCE, "/api/countries/public"),
+    ],
+    EXPECTED_ROUTES
+  );
 });
