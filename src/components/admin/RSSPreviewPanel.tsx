@@ -24,6 +24,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { adminGet, adminPost } from "@/lib/api/apiClient";
 
@@ -176,6 +178,7 @@ function RssItemCard({
   onImportSuccess: (sourceUrl: string, articleId: string) => void;
 }) {
   const [importState, setImportState] = useState<ImportState>({ status: "idle" });
+  const [expanded, setExpanded] = useState(false);
 
   const effectiveAlreadyImported =
     item.alreadyImported ||
@@ -271,14 +274,43 @@ function RssItemCard({
         </div>
 
         {/* Headline */}
-        <h3 className="text-xs sm:text-[13px] font-semibold text-slate-900 leading-snug line-clamp-2">
+        <h3
+          className={`text-xs sm:text-[13px] font-semibold text-slate-900 leading-snug ${
+            expanded ? "" : "line-clamp-2"
+          }`}
+        >
           {item.headline}
         </h3>
 
-        {/* Summary */}
-        <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
-          {item.summary}
-        </p>
+        {/* Summary — smooth CSS max-height expansion */}
+        <div
+          className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
+          style={{ maxHeight: expanded ? "600px" : "4.5em" }}
+        >
+          <p className="text-xs text-slate-600 leading-relaxed">
+            {item.summary}
+          </p>
+        </div>
+
+        {/* Read More / Show Less toggle */}
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#1769E0] hover:text-[#1357bd] transition-colors cursor-pointer -mt-0.5"
+          aria-expanded={expanded}
+          aria-label={expanded ? "Show less" : "Read more"}
+        >
+          {expanded ? (
+            <>
+              <ChevronUp className="h-3 w-3" />
+              <span>Show less</span>
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-3 w-3" />
+              <span>Read more</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Footer: source URL + action */}

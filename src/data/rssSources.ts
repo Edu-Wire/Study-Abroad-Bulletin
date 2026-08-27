@@ -158,7 +158,7 @@ export const rssSources: RssSource[] = [
     country: "European Union",
     category: "Scholarships",
     sourceType: "government",
-    feedUrl: "https://ec.europa.eu/commission/presscorner/api/rss",
+    feedUrl: "https://ec.europa.eu/commission/presscorner/api/rss?language=en&pagesize=50",
     enabled: true,
     slugPrefix: "eu-press",
     fallbackImage: "/images/news-scholarship.jpg",
