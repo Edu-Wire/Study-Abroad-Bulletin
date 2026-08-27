@@ -1,26 +1,54 @@
 import rateLimit from "express-rate-limit";
 import { clientKeyGenerator } from "./bff.js";
 
-/**
- * All limiters key on the address the trusted BFF reported, falling back to the
- * socket address. Without this every request would arrive from the Next.js
- * server and share one bucket, letting a single caller exhaust the limit for
- * everyone — a denial of service rather than a protection.
- *
- * `trust proxy` is intentionally left off; see clientKeyGenerator.
- */
 const keyGenerator = clientKeyGenerator;
 
-/**
- * Strict Rate Limiter for Authentication endpoints (/api/login, /api/signup)
- * Limits each IP to 10 requests per 15 minutes to prevent brute-force attacks.
- */
+const SERVICE_READ_PREFIXES = [
+  "/api/countries",
+  "/api/articles/public",
+  "/api/universities",
+  "/api/scholarships",
+  "/api/immigration-deadlines",
+  "/api/consultants",
+];
+
+function requestPath(req) {
+  return String(req.originalUrl ?? "").split("?", 1)[0];
+}
+
+export function isTrustedServiceRead(req) {
+  if (req.method !== "GET" || req.isTrustedServiceReader !== true) return false;
+  const path = requestPath(req);
+  return SERVICE_READ_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(prefix + "/")
+  );
+}
+
+export function createServiceQuotaLimiter(options = {}) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
+    keyGenerator: () => "service-reader",
+    skip: (req) => !isTrustedServiceRead(req),
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    statusCode: 429,
+    message: {
+      success: false,
+      message: "The internal content service quota has been exceeded.",
+    },
+    ...options,
+  });
+}
+
+export const serviceQuotaLimiter = createServiceQuotaLimiter();
+
 export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   keyGenerator,
-  standardHeaders: "draft-7", // Return standard `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
   statusCode: 429,
   message: {
     success: false,
@@ -28,10 +56,6 @@ export const authLimiter = rateLimit({
   },
 });
 
-/**
- * Rate Limiter for administrative mutations (user invites, status changes)
- * Limits each IP to 30 requests per 15 minutes.
- */
 export const adminMutationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -45,19 +69,21 @@ export const adminMutationLimiter = rateLimit({
   },
 });
 
-/**
- * General API Rate Limiter
- * Limits each IP to 100 requests per 15 minutes.
- */
-export const generalApiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  keyGenerator,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  statusCode: 429,
-  message: {
-    success: false,
-    message: "Too many requests from this IP. Please try again later.",
-  },
-});
+export function createGeneralApiLimiter(options = {}) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    keyGenerator,
+    skip: isTrustedServiceRead,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    statusCode: 429,
+    message: {
+      success: false,
+      message: "Too many requests from this IP. Please try again later.",
+    },
+    ...options,
+  });
+}
+
+export const generalApiLimiter = createGeneralApiLimiter();

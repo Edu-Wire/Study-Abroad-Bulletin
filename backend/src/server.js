@@ -28,6 +28,7 @@ import {
 import {
   authLimiter,
   adminMutationLimiter,
+  serviceQuotaLimiter,
   generalApiLimiter,
 } from "./middleware/rateLimiter.js";
 import { validateRequest } from "./middleware/validate.js";
@@ -76,6 +77,9 @@ app.use(express.json());
 // Every browser-facing endpoint must arrive through the trusted Next.js BFF.
 // /api/health is exempt so infrastructure probes keep working.
 app.use(requireBffSecret);
+
+// Server-side public readers use a separate service quota after BFF verification.
+app.use("/api", serviceQuotaLimiter);
 
 // Baseline ceiling on all API traffic. Endpoint-specific limiters below are
 // stricter; this catches everything else, including read-heavy scraping.
