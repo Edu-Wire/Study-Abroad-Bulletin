@@ -1,3 +1,26 @@
+import type {
+  Country,
+  Deadline,
+  Guide,
+  NewsArticle,
+  NewsCategory,
+  NewsCategoryFilter,
+  Scholarship,
+  University,
+  VisaUpdate,
+} from "../contracts";
+
+export type {
+  Country,
+  Deadline,
+  Guide,
+  NewsArticle,
+  NewsCategory,
+  NewsCategoryFilter,
+  Scholarship,
+  University,
+  VisaUpdate,
+} from "../contracts";
 /* All figures below are illustrative demo data for interface preview only. */
 
 export const images = {
@@ -9,100 +32,6 @@ export const images = {
   newsGermany: "/images/news-germany.jpg",
   newsLibrary: "/images/news-library.jpg",
   newsAustralia: "/images/news-australia.jpg",
-};
-
-export type NewsCategory =
-  | "Universities"
-  | "Admissions"
-  | "Scholarships"
-  | "Visa"
-  | "Student Life"
-  | "Career";
-
-export type NewsArticle = {
-  id: string;
-  slug: string;
-  category: NewsCategory;
-  country: string;
-  headline: string;
-  summary: string;
-  content?: string | null;
-  date: string;
-  readingTime: string;
-  image: string;
-  breaking?: boolean;
-  /** Set for articles sourced from an external RSS/Atom feed */
-  isRss?: boolean;
-  /** URL of the original article on the source website */
-  sourceUrl?: string;
-  /** Human-readable name of the news source */
-  sourceName?: string;
-};
-
-export type Country = {
-  id: string;
-  name: string;
-  flag: string;
-  universities: number;
-  averageTuition: string;
-  popularIntake: string;
-  updates: number;
-};
-
-export type University = {
-  id: string;
-  name: string;
-  initials: string;
-  country: string;
-  city: string;
-  ranking: number;
-  tuition: string;
-  tuitionValue: number;
-  courses: string[];
-  scholarships: boolean;
-  intake: string;
-  degree: "Bachelors" | "Masters" | "Both";
-  ielts: string;
-};
-
-export type Scholarship = {
-  id: string;
-  name: string;
-  organization: string;
-  country: string;
-  funding: string;
-  degree: string;
-  deadline: string;
-  daysLeft: number;
-  eligibility: string;
-  type: "Fully Funded" | "Partial" | "Tuition Waiver";
-};
-
-export type VisaUpdate = {
-  id: string;
-  country: string;
-  flag: string;
-  visaType: string;
-  headline: string;
-  date: string;
-  urgent?: boolean;
-};
-
-export type Guide = {
-  id: string;
-  category: string;
-  title: string;
-  description: string;
-  readingTime: string;
-};
-
-export type Deadline = {
-  id: string;
-  title: string;
-  country: string;
-  type: "University" | "Scholarship";
-  deadline: string;
-  daysLeft: number;
 };
 
 export const breakingHeadline =
@@ -698,5 +627,3 @@ export const newsCategories = [
   "Student Life",
   "Career",
 ] as const;
-
-export type NewsCategoryFilter = (typeof newsCategories)[number];
