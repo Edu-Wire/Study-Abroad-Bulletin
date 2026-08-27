@@ -8,6 +8,8 @@ import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner } from "@/components/editorial/AdComponents";
 import { getCountries } from "@/lib/server/countries";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Study Destinations — Compare Countries for International Students",
   description:
