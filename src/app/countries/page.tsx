@@ -6,7 +6,7 @@ import { SectionHeading } from "@/components/common/SectionHeading";
 import { CountryCard } from "@/components/cards/CountryCard";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner } from "@/components/editorial/AdComponents";
-import { countries } from "@/data/mock";
+import { getCountries } from "@/lib/server/countries";
 
 export const metadata: Metadata = {
   title: "Study Destinations — Compare Countries for International Students",
@@ -14,7 +14,12 @@ export const metadata: Metadata = {
     "Compare study destinations worldwide. Explore universities, tuition costs, visa information and intake dates for Canada, UK, USA, Australia, Germany and more.",
 };
 
-export default function CountriesPage() {
+export default async function CountriesPage() {
+  const countries = (await getCountries()).map((country) => ({
+    ...country,
+    universities: country.universitiesCount,
+    updates: country.updatesCount,
+  }));
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
       <Header />
