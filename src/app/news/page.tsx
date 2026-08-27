@@ -1,7 +1,6 @@
 import { Fragment } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Newspaper } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
@@ -70,7 +69,7 @@ export default async function NewsPage({ searchParams }: Props) {
         <div className="shell py-10 lg:py-14">
           {totalArticles === 0 ? (
             <div className="py-20 text-center border border-dashed border-border rounded-lg bg-surface">
-              <Newspaper className="mx-auto h-12 w-12 text-muted-foreground/40 mb-3" />
+              <span aria-hidden className="mx-auto mb-3 block text-5xl text-muted-foreground/40">&#128240;</span>
               <p className="font-display text-xl font-bold text-foreground">No news articles published yet</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Check back soon or publish articles from the Admin panel.
@@ -180,7 +179,7 @@ export default async function NewsPage({ searchParams }: Props) {
                         }`}
                         title="First Page"
                       >
-                        <ChevronsLeft className="h-4 w-4" />
+                        <span aria-hidden className="text-base">&laquo;</span>
                       </Link>
 
                       {/* Previous Page */}
@@ -194,7 +193,7 @@ export default async function NewsPage({ searchParams }: Props) {
                         }`}
                         title="Previous Page"
                       >
-                        <ChevronLeft className="h-4 w-4" />
+                        <span aria-hidden className="text-base">&lsaquo;</span>
                       </Link>
 
                       {/* Numbered Page Buttons */}
@@ -236,7 +235,7 @@ export default async function NewsPage({ searchParams }: Props) {
                         }`}
                         title="Next Page"
                       >
-                        <ChevronRight className="h-4 w-4" />
+                        <span aria-hidden className="text-base">&rsaquo;</span>
                       </Link>
 
                       {/* Last Page */}
@@ -250,7 +249,7 @@ export default async function NewsPage({ searchParams }: Props) {
                         }`}
                         title="Last Page"
                       >
-                        <ChevronsRight className="h-4 w-4" />
+                        <span aria-hidden className="text-base">&raquo;</span>
                       </Link>
                     </div>
                   </nav>

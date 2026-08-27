@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import {
   images,
   countries,
@@ -205,7 +204,7 @@ export function Hero({ articles }: HeroProps) {
                       }`}
                   >
                     <span className="truncate pr-1">{label}</span>
-                    <ArrowRight className="size-3 text-primary group-hover:text-primary-foreground shrink-0" />
+                    <span aria-hidden className="text-primary group-hover:text-primary-foreground shrink-0">&rarr;</span>
                   </Link>
                 ))}
               </div>
@@ -285,7 +284,7 @@ export function TodaysBriefing({ articles }: TodaysBriefingProps) {
               href="/news"
               className="mt-4 inline-flex items-center gap-1.5 eyebrow text-primary hover:text-foreground transition-colors"
             >
-              All stories <ArrowRight className="size-3" />
+              All stories <span aria-hidden>&rarr;</span>
             </Link>
           </div>
 
@@ -387,7 +386,7 @@ export function ExploreDestinations() {
               href="/countries"
               className="mt-4 inline-flex items-center gap-1.5 eyebrow text-primary hover:text-foreground transition-colors"
             >
-              View all destinations <ArrowRight className="size-3" />
+              View all destinations <span aria-hidden>&rarr;</span>
             </Link>
           </div>
         </div>
@@ -449,7 +448,7 @@ export function ScholarshipSpotlight() {
                   href={`/scholarships/${highlightedScholarship.id}`}
                   className="mt-4 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-primary px-4 py-2.5 eyebrow text-primary-foreground hover:opacity-90 transition-opacity"
                 >
-                  View Scholarship <ArrowRight className="size-3" />
+                  View Scholarship <span aria-hidden>&rarr;</span>
                 </Link>
               </div>
             </div>
@@ -546,7 +545,7 @@ export function VisaUpdatesSection() {
                   Status: Updated
                 </p>
                 <Link href="/visa" className="mt-4 inline-flex items-center gap-1.5 eyebrow text-primary hover:text-foreground transition-colors">
-                  Read Update <ArrowRight className="size-3" />
+                  Read Update <span aria-hidden>&rarr;</span>
                 </Link>
               </article>
             )}
@@ -750,7 +749,7 @@ export function UpcomingDeadlines() {
                   className="group flex items-center justify-between py-3.5 text-sm font-semibold text-foreground hover:text-primary transition-colors min-w-0"
                 >
                   <span className="headline-link min-w-0 pr-2 truncate">{title}</span>
-                  <ArrowRight className="size-4 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                  <span aria-hidden className="text-base opacity-0 group-hover:opacity-100 transition-opacity shrink-0">&rarr;</span>
                 </Link>
               ))}
             </div>
@@ -791,7 +790,7 @@ export function ImmigrationTrackerSpotlight() {
               className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-primary px-6 py-3 eyebrow text-primary-foreground hover:opacity-90 transition-opacity"
             >
               <span>View Deadline Tracker</span>
-              <ArrowRight className="size-4" />
+              <span aria-hidden className="text-base">&rarr;</span>
             </Link>
           </div>
         </div>
@@ -822,7 +821,7 @@ export function ConsultantsSpotlight() {
               className="inline-flex w-full sm:w-auto items-center justify-center gap-2 border border-foreground bg-background px-6 py-3 eyebrow text-foreground hover:border-primary hover:text-primary transition-colors"
             >
               <span>Explore Directory</span>
-              <ArrowRight className="size-4" />
+              <span aria-hidden className="text-base">&rarr;</span>
             </Link>
           </div>
         </div>
