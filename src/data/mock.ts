@@ -13,6 +13,8 @@ export type {
   Deadline,
   Guide,
   NewsArticle,
+  NewsCategory,
+  NewsCategoryFilter,
   Scholarship,
   University,
   VisaUpdate,
