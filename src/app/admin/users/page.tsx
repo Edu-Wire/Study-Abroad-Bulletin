@@ -17,6 +17,8 @@ import {
   Loader2,
   Copy,
   Check,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer } from "@/components/admin/AdminTable";
@@ -48,6 +50,7 @@ export default function AdminUsersPage() {
     role: "EDITOR",
     password: "",
   });
+  const [showInvitePassword, setShowInvitePassword] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<{
     success?: boolean;
     message?: string;
@@ -65,6 +68,7 @@ export default function AdminUsersPage() {
     status: "ACTIVE",
     password: "",
   });
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [editStatus, setEditStatus] = useState<{
     success?: boolean;
     message?: string;
@@ -529,15 +533,27 @@ export default function AdminUsersPage() {
                 <p className="text-[11px] text-slate-500 mb-2">
                   Leave blank to preserve current password.
                 </p>
-                <input
-                  type="password"
-                  placeholder="Enter new password (e.g. editor@123)"
-                  value={editForm.password}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, password: e.target.value })
-                  }
-                  className="w-full h-8.5 px-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
-                />
+                <div className="relative">
+                  <input
+                    type={showEditPassword ? "text" : "password"}
+                    placeholder="Enter new password (e.g. editor@123)"
+                    value={editForm.password}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, password: e.target.value })
+                    }
+                    className="w-full h-8.5 pl-3 pr-9 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword((prev) => !prev)}
+                    className="absolute right-0 top-0 flex h-8.5 w-8.5 items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                    aria-label={showEditPassword ? "Hide password" : "Show password"}
+                    title={showEditPassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showEditPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200/80">
@@ -674,15 +690,27 @@ export default function AdminUsersPage() {
                 <p className="text-[11px] text-slate-500 mb-1.5">
                   Leave blank to auto-generate a secure 12-character temporary password.
                 </p>
-                <input
-                  type="password"
-                  placeholder="Min. 8 characters or leave blank"
-                  value={inviteForm.password}
-                  onChange={(e) =>
-                    setInviteForm({ ...inviteForm, password: e.target.value })
-                  }
-                  className="w-full h-8.5 px-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
-                />
+                <div className="relative">
+                  <input
+                    type={showInvitePassword ? "text" : "password"}
+                    placeholder="Min. 8 characters or leave blank"
+                    value={inviteForm.password}
+                    onChange={(e) =>
+                      setInviteForm({ ...inviteForm, password: e.target.value })
+                    }
+                    className="w-full h-8.5 pl-3 pr-9 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowInvitePassword((prev) => !prev)}
+                    className="absolute right-0 top-0 flex h-8.5 w-8.5 items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                    aria-label={showInvitePassword ? "Hide password" : "Show password"}
+                    title={showInvitePassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showInvitePassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </div>
 
               {createdTempPassword && (
