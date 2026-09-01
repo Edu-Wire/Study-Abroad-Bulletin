@@ -1,4 +1,8 @@
-import { connectDB } from "./config/db.js";
+import express from "express";
+import cors from "cors";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { XMLParser } from "fast-xml-parser";
 import { prisma } from "./config/prisma.js";
 import {
   SESSION_COOKIE_NAME,
@@ -23,6 +27,7 @@ import {
 import {
   authLimiter,
   adminMutationLimiter,
+  serviceQuotaLimiter,
   generalApiLimiter,
 } from "./middleware/rateLimiter.js";
 import { validateRequest } from "./middleware/validate.js";
@@ -42,9 +47,9 @@ import {
   PasswordChangeSchema,
 } from "./validators/index.js";
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
-import ingestionRoutes from "./modules/ingestion/ingestion.routes.js";
+import countriesPublicRouter from "./modules/countries/countries.routes.js";
 
-const PORT = process.env.PORT || 8000;
+const app = express();
 
 // Allowed origins for CORS with credentials
 const allowedOrigins = [
@@ -72,12 +77,14 @@ app.use(express.json());
 // /api/health is exempt so infrastructure probes keep working.
 app.use(requireBffSecret);
 
+// Server-side public readers use a separate service quota after BFF verification.
+app.use("/api", serviceQuotaLimiter);
+
 // Baseline ceiling on all API traffic. Endpoint-specific limiters below are
 // stricter; this catches everything else, including read-heavy scraping.
 app.use("/api", generalApiLimiter);
 
-// Ingestion Engine Admin API Routes
-app.use("/api/admin", ingestionRoutes);
+app.use("/api/countries/public", countriesPublicRouter);
 
 // Cookie configuration for opaque session tokens.
 export const AUTH_COOKIE_OPTIONS = {
@@ -1601,19 +1608,4 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", database: "PostgreSQL abroad_bulletin", serverTime: new Date() });
 });
 
-/**
- * Fail-fast server startup: only listen after database connection is verified
- */
-async function startServer() {
-  const isConnected = await connectDB();
-  if (!isConnected) {
-    console.error("Fatal: PostgreSQL database connection failed. Halting server startup.");
-    process.exit(1);
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Authentication Backend Server running on http://localhost:${PORT}`);
-  });
-}
-
-startServer();
+export default app;

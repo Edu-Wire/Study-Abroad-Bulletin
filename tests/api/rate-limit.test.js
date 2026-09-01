@@ -21,7 +21,7 @@ const { authLimiter, adminMutationLimiter, generalApiLimiter } = await import(
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const serverSource = readFileSync(
-  path.join(repoRoot, "backend/src/server.js"),
+  path.join(repoRoot, "backend/src/app.js"),
   "utf8"
 );
 

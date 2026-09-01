@@ -157,7 +157,7 @@ test("a read-only duplicate preflight exists", () => {
 
 test("RSS import guards against duplicate source URLs", () => {
   const serverSource = readFileSync(
-    path.join(repoRoot, "backend/src/server.js"),
+    path.join(repoRoot, "backend/src/app.js"),
     "utf8"
   );
 

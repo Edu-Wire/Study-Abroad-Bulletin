@@ -227,7 +227,7 @@ test("trust proxy is not enabled anywhere", async () => {
   const { readFileSync } = await import("node:fs");
   const path = await import("node:path");
   const source = readFileSync(
-    path.join(import.meta.dirname, "../../backend/src/server.js"),
+    path.join(import.meta.dirname, "../../backend/src/app.js"),
     "utf8"
   );
 
