@@ -47,6 +47,7 @@ import {
   PasswordChangeSchema,
 } from "./validators/index.js";
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
+import ingestionRoutes from "./modules/ingestion/ingestion.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -80,6 +81,9 @@ app.use(requireBffSecret);
 // Baseline ceiling on all API traffic. Endpoint-specific limiters below are
 // stricter; this catches everything else, including read-heavy scraping.
 app.use("/api", generalApiLimiter);
+
+// Ingestion Engine Admin API Routes
+app.use("/api/admin", ingestionRoutes);
 
 // Cookie configuration for opaque session tokens.
 export const AUTH_COOKIE_OPTIONS = {

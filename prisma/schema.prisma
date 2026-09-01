@@ -158,6 +158,7 @@ model Country {
   scholarships           ScholarshipHostCountry[]
   immigrationDeadlines   ImmigrationDeadline[]
   rssSources             RSSSource[]
+  contentSources         ContentSource[]
   consultantsHQ          Consultant[]             @relation("ConsultantHQ")
   consultantDestinations ConsultantDestination[]
 }
@@ -193,6 +194,10 @@ model Article {
   // RSS Relation
   rssSourceId String?
   rssSource   RSSSource? @relation(fields: [rssSourceId], references: [id])
+
+  // Ingestion Relations
+  sourceLinks ArticleSourceLink[]
+  candidates  ArticleCandidate[]
 
   @@index([status, publishedAt])
   @@index([primaryCountryId, publishedAt])
@@ -380,3 +385,340 @@ model ConsultantDestination {
 
   @@id([consultantId, countryId])
 }
+
+// ============================================================
+// INGESTION ENGINE ENUMS
+// ============================================================
+
+enum SourceType {
+  API
+  ATOM
+  RSS
+  WEB
+  WATCH
+  DATA
+}
+
+enum SourceHealthStatus {
+  HEALTHY
+  DEGRADED
+  STALE
+  BROKEN
+  RATE_LIMITED
+}
+
+enum SourceRunType {
+  LIVE
+  BACKFILL
+  RECONCILE
+  MANUAL
+}
+
+enum SourceRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+enum ProcessingStatus {
+  DISCOVERED
+  DETAIL_PENDING
+  ENRICHED
+  NORMALIZED
+  VERSIONED
+  SCORED
+  CLASSIFIED
+  ROUTED
+  IMPORTED
+  PUBLISHED
+}
+
+enum RoutingDecision {
+  IGNORE
+  REVIEW
+  CREATE_DRAFT
+  PUBLISH
+}
+
+enum CandidateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  AUTO_DRAFTED
+  DRAFT_CREATED
+  IGNORED
+}
+
+enum SourceLinkType {
+  PRIMARY_SOURCE
+  REFERENCE
+  CORROBORATING
+}
+
+enum BackfillStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  PAUSED
+}
+
+enum WindowStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ============================================================
+// INGESTION ENGINE MODELS
+// ============================================================
+
+model ContentSource {
+  id             String             @id @default(cuid())
+  code           String             @unique // e.g. "CA_IRCC_ATOM", "UK_GOVUK_SEARCH"
+  name           String
+  countryId      String?
+  country        Country?           @relation(fields: [countryId], references: [id])
+  sourceType     SourceType         @default(RSS)
+  baseUrl        String
+  feedUrl        String?
+  enabled        Boolean            @default(true)
+  disabledReason String?            @db.Text
+  config         Json?
+  schedule       String?            // cron or interval string
+  categoryHint   ArticleCategory?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  // Relations
+  syncState      SourceSyncState?
+  runs           SourceRun[]
+  items          SourceItem[]
+  backfillRuns   BackfillRun[]
+
+  @@index([countryId])
+  @@index([sourceType, enabled])
+}
+
+model SourceSyncState {
+  id                  String             @id @default(cuid())
+  contentSourceId     String             @unique
+  contentSource       ContentSource      @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  cursor              String?
+  watermark           DateTime?
+  etag                String?
+  lastModified        String?
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  lastErrorMessage    String?            @db.Text
+  consecutiveFailures Int                @default(0)
+  healthStatus        SourceHealthStatus @default(HEALTHY)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model SourceRun {
+  id              String          @id @default(cuid())
+  contentSourceId String
+  contentSource   ContentSource   @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  runType         SourceRunType   @default(LIVE)
+  status          SourceRunStatus @default(RUNNING)
+  startedAt       DateTime        @default(now())
+  finishedAt      DateTime?
+  itemsFound      Int             @default(0)
+  itemsCreated    Int             @default(0)
+  itemsUpdated    Int             @default(0)
+  itemsFailed     Int             @default(0)
+  errorMessage    String?         @db.Text
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+
+  @@index([contentSourceId, startedAt, status])
+}
+
+model SourceItem {
+  id               String                  @id @default(cuid())
+  contentSourceId  String
+  contentSource    ContentSource           @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  externalId       String?
+  canonicalUrl     String
+  canonicalUrlHash String
+  title            String
+  summary          String?                 @db.Text
+  publishedAt      DateTime?
+  discoveredAt     DateTime                @default(now())
+  processingStatus ProcessingStatus        @default(DISCOVERED)
+  countryId        String?
+  language         String?                 @default("en")
+  nativeTopics     String[]
+  rawMetadata      Json?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  // Relations
+  versions         SourceDocumentVersion[]
+  assessments      AiAssessment[]
+  candidate        ArticleCandidate?
+  articleLinks     ArticleSourceLink[]
+
+  @@unique([contentSourceId, externalId])
+  @@unique([contentSourceId, canonicalUrlHash])
+  @@index([publishedAt])
+  @@index([countryId, contentSourceId])
+  @@index([processingStatus])
+}
+
+model SourceDocumentVersion {
+  id             String              @id @default(cuid())
+  sourceItemId   String
+  sourceItem     SourceItem          @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  contentHash    String
+  rawBody        String?             @db.Text
+  cleanHtml      String?             @db.Text
+  cleanText      String?             @db.Text
+  title          String?
+  authors        String[]
+  versionNumber  Int                 @default(1)
+  httpStatus     Int?
+  capturedAt     DateTime            @default(now())
+
+  // Relations
+  diffsFromPrior SourceDiff[]        @relation("PriorVersion")
+  diffsToNext    SourceDiff[]        @relation("NextVersion")
+  assessments    AiAssessment[]
+  articleLinks   ArticleSourceLink[]
+
+  @@unique([sourceItemId, contentHash])
+  @@index([sourceItemId, capturedAt])
+}
+
+model SourceDiff {
+  id             String                @id @default(cuid())
+  sourceItemId   String
+  priorVersionId String
+  priorVersion   SourceDocumentVersion @relation("PriorVersion", fields: [priorVersionId], references: [id], onDelete: Cascade)
+  nextVersionId  String
+  nextVersion    SourceDocumentVersion @relation("NextVersion", fields: [nextVersionId], references: [id], onDelete: Cascade)
+  isMaterial     Boolean               @default(false)
+  changeSummary  String?               @db.Text
+  addedTokens    Int                   @default(0)
+  removedTokens  Int                   @default(0)
+  patch          String?               @db.Text
+  detectedAt     DateTime              @default(now())
+
+  @@index([sourceItemId, detectedAt])
+}
+
+model AiAssessment {
+  id                String                 @id @default(cuid())
+  sourceItemId      String
+  sourceItem        SourceItem             @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  versionId         String?
+  version           SourceDocumentVersion? @relation(fields: [versionId], references: [id])
+  relevanceScore    Float
+  confidenceScore   Float
+  urgency           String?
+  internalCategory  String
+  suggestedCategory ArticleCategory?
+  routingDecision   RoutingDecision        @default(REVIEW)
+  suggestedHeadline String?
+  suggestedSummary  String?                @db.Text
+  suggestedContent  String?                @db.Text
+  keyTakeaways      String[]
+  targetAudience    String[]
+  model             String
+  promptVersion     String
+  rawOutput         Json?
+  createdAt         DateTime               @default(now())
+
+  // Relations
+  candidate         ArticleCandidate?
+
+  @@index([sourceItemId, createdAt])
+  @@index([routingDecision])
+}
+
+model ArticleCandidate {
+  id               String           @id @default(cuid())
+  sourceItemId     String           @unique
+  sourceItem       SourceItem       @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  aiAssessmentId   String?          @unique
+  aiAssessment     AiAssessment?    @relation(fields: [aiAssessmentId], references: [id])
+  headline         String
+  summary          String           @db.Text
+  content          String?          @db.Text
+  category         ArticleCategory  @default(VISA)
+  primaryCountryId String?
+  confidence       Float            @default(0.0)
+  status           CandidateStatus  @default(PENDING)
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+  articleId        String?
+  article          Article?         @relation(fields: [articleId], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([status, createdAt])
+  @@index([primaryCountryId])
+}
+
+model ArticleSourceLink {
+  id           String                 @id @default(cuid())
+  articleId    String
+  article      Article                @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  sourceItemId String
+  sourceItem   SourceItem             @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  versionId    String?
+  version      SourceDocumentVersion? @relation(fields: [versionId], references: [id])
+  linkType     SourceLinkType         @default(PRIMARY_SOURCE)
+  createdAt    DateTime               @default(now())
+
+  @@unique([articleId, sourceItemId])
+  @@index([sourceItemId])
+}
+
+model BackfillRun {
+  id               String           @id @default(cuid())
+  contentSourceId  String
+  contentSource    ContentSource    @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  startDate        DateTime
+  endDate          DateTime
+  status           BackfillStatus   @default(PENDING)
+  totalWindows     Int              @default(0)
+  completedWindows Int              @default(0)
+  failedWindows    Int              @default(0)
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  config           Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  windows          BackfillWindow[]
+
+  @@index([contentSourceId, status])
+}
+
+model BackfillWindow {
+  id            String         @id @default(cuid())
+  backfillRunId String
+  backfillRun   BackfillRun    @relation(fields: [backfillRunId], references: [id], onDelete: Cascade)
+  windowStart   DateTime
+  windowEnd     DateTime
+  cursor        String?
+  pageNumber    Int?
+  status        WindowStatus   @default(PENDING)
+  itemsFound    Int            @default(0)
+  attempts      Int            @default(0)
+  lastError     String?        @db.Text
+  completedAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([backfillRunId, windowStart, windowEnd])
+  @@index([backfillRunId, status])
+}
+
