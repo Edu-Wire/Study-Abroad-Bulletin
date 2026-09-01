@@ -15,6 +15,8 @@ import {
   Clock,
   Users,
   Settings,
+  Rss,
+  History,
   ExternalLink,
   X,
   ShieldCheck,
@@ -72,6 +74,18 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Editorial Guides",
         href: "/admin/guides",
         icon: BookOpen,
+        roles: ["SUPER_ADMIN", "ADMIN", "EDITOR"],
+      },
+      {
+        label: "Automated Sources",
+        href: "/admin/sources",
+        icon: Rss,
+        roles: ["SUPER_ADMIN", "ADMIN", "EDITOR"],
+      },
+      {
+        label: "Source Changes",
+        href: "/admin/source-changes",
+        icon: History,
         roles: ["SUPER_ADMIN", "ADMIN", "EDITOR"],
       },
     ],
@@ -192,10 +206,10 @@ export function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
     role === "SUPER_ADMIN"
       ? "Super Admin"
       : role === "EDITOR"
-      ? "Senior Editor"
-      : role === "ADMIN"
-      ? "Admin"
-      : "";
+        ? "Senior Editor"
+        : role === "ADMIN"
+          ? "Admin"
+          : "";
 
   return (
     <aside className="h-full flex flex-col bg-[#071A33] text-slate-200 border-r border-[#152945] select-none">
@@ -263,18 +277,16 @@ export function AdminSidebar({ onCloseMobile }: AdminSidebarProps) {
                     key={item.href}
                     href={item.href}
                     onClick={onCloseMobile}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                      active
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all ${active
                         ? "bg-[#1769E0] text-white shadow-2xs font-semibold"
                         : "text-slate-300 hover:text-white hover:bg-white/5"
-                    }`}
+                      }`}
                   >
                     <Icon
-                      className={`h-4 w-4 shrink-0 transition-colors ${
-                        active
+                      className={`h-4 w-4 shrink-0 transition-colors ${active
                           ? "text-white"
                           : "text-slate-400 group-hover:text-white"
-                      }`}
+                        }`}
                     />
                     <span className="truncate">{item.label}</span>
                     {active && (
