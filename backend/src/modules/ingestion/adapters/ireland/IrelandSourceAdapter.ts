@@ -1,9 +1,11 @@
 /**
- * Ireland adapters - Blueprint 5.7 [R15][R16].
+ * SOURCE:        Ireland - Immigration Service Delivery (Dept of Justice)
+ * APPENDIX A:    [R15] News & Updates · [R16] Student Permission
+ * FAMILY:        WEB_LISTING · CHANGE_WATCH
+ * BLUEPRINT:     5.7 Ireland
  *
- * Immigration Service Delivery is the core Ireland source. Student notices share
- * a collection with citizenship and protection updates, so the prefilter carries
- * the burden of keeping the desk on topic.
+ * Student notices share one collection with citizenship and protection updates,
+ * so the deterministic prefilter carries the burden of keeping the desk on topic.
  */
 
 import { ChangeWatchAdapter } from "../changeWatch/ChangeWatchAdapter";
@@ -12,16 +14,22 @@ import type { SourceAdapter } from "../base/SourceAdapter";
 import type { SourceConfig } from "../../config/sourceConfig.schema";
 
 /**
- * ISD News and Updates [R15].
- * Day 2 notes: citizenship and temporary-protection updates are not study-abroad
- * content unless a student rule is explicitly affected.
+ * SOURCE:        ISD News and Updates
+ * APPENDIX A:    [R15] · FAMILY WEB_LISTING · SCHEDULE every 30 min · BACKFILL 3y
+ * IDENTITY:      canonical URL
+ * NOTE:          Citizenship and temporary-protection updates are not
+ *                study-abroad content unless a student rule is affected (5.7).
  */
-export class IrelandIsdNewsAdapter extends WebListingAdapter {}
+export class IrelandIsdNewsAdapter extends WebListingAdapter {
+  protected readonly itemUrlPattern = /irishimmigration\.ie\/(news-and-updates|.+-notice)\/.+/i;
+  protected readonly listingSelector = "main";
+}
 
 /**
- * Student Permission / Coming to Study watch [R16].
- * Day 2 notes: version and diff student finance, eligible programme, permission
- * and work-condition changes.
+ * SOURCE:        Student Permission / Coming to Study
+ * APPENDIX A:    [R16] · FAMILY CHANGE_WATCH · SCHEDULE every 6h
+ * FACTS:         student finance, eligible programme, permission conditions,
+ *                work conditions (5.7)
  */
 export class IrelandStudentPermissionWatchAdapter extends ChangeWatchAdapter {}
 

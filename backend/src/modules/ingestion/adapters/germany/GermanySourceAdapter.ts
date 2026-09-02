@@ -1,9 +1,12 @@
 /**
- * Germany adapters - Blueprint 5.5 [R13].
+ * SOURCE:        Germany - Federal Foreign Office / Make it in Germany / DAAD
+ * APPENDIX A:    [R13] FFO RSS newsfeed
+ * FAMILY:        RSS_ATOM · CHANGE_WATCH · WEB_LISTING
+ * BLUEPRINT:     5.5 Germany
  *
- * The Federal Foreign Office feeds are authoritative but broad diplomatic
- * content, so they stay low priority behind a strict prefilter. The student
- * signal comes from the Make it in Germany rule watch and DAAD.
+ * The FFO feeds are authoritative but broad diplomatic content, so they run LOW
+ * priority behind a strict prefilter with `aiBudgetGuard`. The student signal
+ * comes from the Make it in Germany rule watch and from DAAD.
  */
 
 import { ChangeWatchAdapter } from "../changeWatch/ChangeWatchAdapter";
@@ -13,29 +16,38 @@ import type { SourceAdapter } from "../base/SourceAdapter";
 import type { SourceConfig } from "../../config/sourceConfig.schema";
 
 /**
- * FFO current articles RSS [R13].
- * Day 2 notes: strict prefilter - do not spend AI tokens on obviously unrelated
- * geopolitical stories.
+ * SOURCE:        FFO current articles
+ * APPENDIX A:    [R13] · FAMILY RSS_ATOM · SCHEDULE hourly · BACKFILL 12m
+ * NOTE:          Strict prefilter. Do not spend AI tokens on obviously unrelated
+ *                geopolitical stories (5.5).
  */
 export class GermanyFfoNewsAdapter extends RssAtomAdapter {}
 
-/** FFO press releases and speeches RSS [R13] - lowest priority German source. */
+/**
+ * SOURCE:        FFO press releases and speeches
+ * APPENDIX A:    [R13] · FAMILY RSS_ATOM · SCHEDULE hourly · BACKFILL 12m
+ * NOTE:          Lowest-priority German source; filter aggressively.
+ */
 export class GermanyFfoPressReleasesAdapter extends RssAtomAdapter {}
 
 /**
- * Make it in Germany "Visa for studying" watch.
- * Day 2 notes: diff financial proof, work limits and post-study residence
- * language; this is the highest-value German source despite being a portal.
+ * SOURCE:        Make it in Germany - Visa for studying
+ * APPENDIX A:    [R13] · FAMILY CHANGE_WATCH · SCHEDULE every 6h
+ * FACTS:         financial proof, work limits, post-study residence (5.5)
  */
 export class GermanyMakeItInGermanyWatchAdapter extends ChangeWatchAdapter {}
 
 /**
- * DAAD press, news and scholarship items.
- * Day 2 notes: classification must separate scholarship opportunities from
- * general mobility news - the scholarship badge still needs its relevance
- * threshold (10.4).
+ * SOURCE:        DAAD press, news and scholarship items
+ * APPENDIX A:    named in 4.2/5.5 without a dedicated reference
+ * FAMILY:        WEB_LISTING · SCHEDULE hourly · BACKFILL 2y
+ * NOTE:          Classification must distinguish a scholarship opportunity from
+ *                general mobility news; the badge still needs its threshold (10.4).
  */
-export class GermanyDaadAdapter extends WebListingAdapter {}
+export class GermanyDaadAdapter extends WebListingAdapter {
+  protected readonly itemUrlPattern = /daad\.de\/(en|de)\/.+(press|news|meldungen)\/.+/i;
+  protected readonly listingSelector = "main";
+}
 
 export function createGermanyAdapter(config: SourceConfig): SourceAdapter {
   switch (config.code) {
