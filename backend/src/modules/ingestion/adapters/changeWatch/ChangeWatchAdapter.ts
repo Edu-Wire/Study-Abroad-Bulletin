@@ -1,63 +1,217 @@
 /**
- * CHANGE_WATCH generic adapter (Blueprint 6.1, algorithm in 11.2).
- *
- * Discovery: a fixed list of watched URLs from `config.watchTargets`.
- * Detail: a snapshot of the same page, diffed against the stored version.
- * Serves: IRCC study permit, UK student/graduate guidance, AU Subclass 500,
- * US F/M/J and SEVP, Make it in Germany, NZ pathway/post-study, Ireland Stamp 2.
+ * CHANGE_WATCH family (Blueprint 6.1; algorithm 11.2).
  *
  * These sources publish rule changes that never get a news item, which is why
- * they are configured CRITICAL even though they emit few documents.
+ * they run CRITICAL despite emitting almost nothing.
+ *
+ * Boundary: this adapter extracts the *content region* and the *material facts*
+ * (11.3). Developer A hashes the region, stores `SourceDocumentVersion` and
+ * computes `SourceDiff`. Nothing here hashes, versions or diffs.
  */
 
-import { BaseSourceAdapter } from "../base/SourceAdapter";
+import { BaseSourceAdapter, DiscoveryPageError } from "../base/SourceAdapter";
+import { extractContentRegion, htmlToText, looksLikeJsShell } from "../base/htmlExtract";
+import { extractMaterialFacts } from "./materialFacts";
 import type {
-  DiscoverContext,
+  AdapterContext,
   DiscoveredItem,
   DiscoveryPage,
   NormalizedSourceDocument,
   SourceDetail,
+  SourceHealth,
   WatchSnapshot,
-  WatchTargetRef,
 } from "../base/types";
 
 export abstract class ChangeWatchAdapter extends BaseSourceAdapter {
   /**
-   * Day 2: a watch does not discover new URLs - it emits one item per configured
-   * watch target whose content hash moved. Unchanged targets record
-   * `last_checked_at` and produce nothing (11.2 steps 1-4).
+   * A watch discovers nothing new - it emits one item per configured target.
+   * Whether a target actually changed is A's comparison, so every target is
+   * returned and the pipeline decides.
    */
-  async discover(ctx: DiscoverContext): Promise<DiscoveryPage> {
-    ctx.logger.debug("Change-watch discovery not implemented", { sourceId: this.sourceId });
-    return this.notImplemented("discover");
+  async discover(ctx: AdapterContext): Promise<DiscoveryPage> {
+    const items: DiscoveredItem[] = this.config.watchTargets.map((target) => ({
+      sourceId: this.code,
+      externalId: this.canonicalize(target.url),
+      canonicalUrl: this.canonicalize(target.url),
+      title: target.label,
+      documentType: "RULE_PAGE",
+      discoveryRaw: {
+        watchTargetKey: target.key,
+        materialFacts: target.materialFacts,
+      },
+    }));
+
+    ctx.logger.debug("Watch targets enumerated", { source: this.code, count: items.length });
+    return this.buildDiscoveryPage(items, { total: items.length });
+  }
+
+  async fetchDetail(item: DiscoveredItem, ctx: AdapterContext): Promise<SourceDetail> {
+    const fetchedAt = ctx.now().toISOString();
+
+    let response;
+    try {
+      response = await ctx.http.get<string>(item.canonicalUrl, {
+        timeoutMs: this.config.http.timeoutMs,
+        maxBytes: this.config.http.maxPayloadBytes,
+        responseType: "text",
+        conditional: this.config.http.conditionalRequests
+          ? { etag: ctx.syncState?.etag, lastModified: ctx.syncState?.lastModified }
+          : undefined,
+      });
+    } catch (cause) {
+      throw new DiscoveryPageError(this.code, { url: item.canonicalUrl }, cause);
+    }
+
+    if (response.notModified) {
+      // 11.2 step 4: unchanged, record last_checked_at and stop.
+      return {
+        item,
+        finalUrl: item.canonicalUrl,
+        contentType: "text/html",
+        detailStatus: "PARTIAL",
+        fetchedAt,
+        etag: ctx.syncState?.etag,
+        lastModified: ctx.syncState?.lastModified,
+      };
+    }
+
+    const region = extractContentRegion(response.body, this.config.detail.contentSelectors);
+    if (!region || region.text.length < 120) {
+      return {
+        item,
+        finalUrl: response.finalUrl,
+        contentType: "text/html",
+        detailStatus: "FAILED",
+        reason: looksLikeJsShell(response.body, region?.text.length ?? 0)
+          ? "JS_ONLY"
+          : "EMPTY_CONTENT",
+        fetchedAt,
+      };
+    }
+
+    return {
+      item,
+      finalUrl: response.finalUrl,
+      contentType: response.headers["content-type"] ?? "text/html",
+      detailStatus: "ENRICHED",
+      body: region.text,
+      fetchedAt,
+      etag: response.headers.etag,
+      lastModified: response.headers["last-modified"],
+    };
+  }
+
+  async normalize(
+    detail: SourceDetail,
+    item: DiscoveredItem,
+    ctx: AdapterContext
+  ): Promise<NormalizedSourceDocument> {
+    const facts = extractMaterialFacts(detail.body ?? "");
+    return this.buildDocument(item, detail, detail.body ?? "", {
+      documentType: "RULE_PAGE",
+      // A rule page has no publication date of its own; the capture time is the
+      // only honest timestamp.
+      publishedAt: detail.fetchedAt,
+      rawMetadata: {
+        transport: "CHANGE_WATCH",
+        watchTargetKey: item.discoveryRaw?.watchTargetKey,
+        extractedFacts: facts,
+        watchedAt: ctx.now().toISOString(),
+      },
+    });
   }
 
   /**
-   * Day 2: fetch the watched page with conditional headers and keep the raw
-   * response as the immutable version body.
+   * One snapshot per configured target (11.2 steps 1-2): fetch conditionally,
+   * extract the meaningful region, pull the material facts. The caller hashes
+   * and diffs.
    */
-  async fetchDetail(item: DiscoveredItem, ctx: DiscoverContext): Promise<SourceDetail> {
-    ctx.logger.debug("Change-watch detail fetch not implemented", { externalId: item.externalId });
-    return this.notImplemented("fetchDetail");
+  async snapshot(ctx: AdapterContext): Promise<WatchSnapshot[]> {
+    const snapshots: WatchSnapshot[] = [];
+
+    for (const target of this.config.watchTargets) {
+      const capturedAt = ctx.now().toISOString();
+
+      let response;
+      try {
+        response = await ctx.http.get<string>(target.url, {
+          timeoutMs: this.config.http.timeoutMs,
+          maxBytes: this.config.http.maxPayloadBytes,
+          responseType: "text",
+          conditional: this.config.http.conditionalRequests
+            ? { etag: ctx.syncState?.etag, lastModified: ctx.syncState?.lastModified }
+            : undefined,
+        });
+      } catch (cause) {
+        // One broken target must not abort the others.
+        ctx.logger.error("Watch target fetch failed", { source: this.code, target: target.key, cause });
+        continue;
+      }
+
+      if (response.notModified) {
+        snapshots.push({
+          targetKey: target.key,
+          url: target.url,
+          finalUrl: target.url,
+          contentRegionText: "",
+          contentRegionHtml: "",
+          extractedFacts: this.emptyFacts(),
+          capturedAt,
+          notModified: true,
+          etag: ctx.syncState?.etag,
+          lastModified: ctx.syncState?.lastModified,
+        });
+        continue;
+      }
+
+      const region = extractContentRegion(response.body, this.config.detail.contentSelectors);
+      if (!region) {
+        ctx.logger.warn("Watch target produced no content region", {
+          source: this.code,
+          target: target.key,
+        });
+        continue;
+      }
+
+      snapshots.push({
+        targetKey: target.key,
+        url: target.url,
+        finalUrl: response.finalUrl,
+        contentRegionText: region.text,
+        contentRegionHtml: region.html,
+        extractedFacts: extractMaterialFacts(region.text, target.materialFacts),
+        capturedAt,
+        notModified: false,
+        etag: response.headers.etag,
+        lastModified: response.headers["last-modified"],
+      });
+    }
+
+    return snapshots;
   }
 
-  /**
-   * Day 2: normalize the changed version into a document whose `fullText` is the
-   * new content region, carrying the diff as change evidence.
-   */
-  async normalize(detail: SourceDetail): Promise<NormalizedSourceDocument> {
-    void detail;
-    return this.notImplemented("normalize");
-  }
-
-  /**
-   * Day 2 (11.2): extract the meaningful content region - dropping navigation,
-   * cookie banners and non-content timestamps - hash it, compare with
-   * `target.previousHash`, and on a change store an immutable version plus a
-   * field/text diff classified against the target's `materialFacts` (11.3).
-   */
-  async snapshot(target: WatchTargetRef, ctx: DiscoverContext): Promise<WatchSnapshot> {
-    ctx.logger.debug("Change-watch snapshot not implemented", { target: target.key });
-    return this.notImplemented("snapshot");
+  async healthcheck(ctx: AdapterContext): Promise<SourceHealth> {
+    const startedAt = Date.now();
+    const target = this.config.watchTargets[0];
+    try {
+      const response = await ctx.http.get<string>(target.url, {
+        timeoutMs: this.config.http.timeoutMs,
+        responseType: "text",
+      });
+      const usable = htmlToText(response.body).length > 200;
+      return {
+        state: usable ? "HEALTHY" : "BROKEN",
+        checkedAt: ctx.now().toISOString(),
+        latencyMs: Date.now() - startedAt,
+        message: usable ? undefined : "Watched page returned no extractable content",
+      };
+    } catch (error) {
+      return {
+        state: "BROKEN",
+        checkedAt: ctx.now().toISOString(),
+        latencyMs: Date.now() - startedAt,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 }

@@ -1,0 +1,566 @@
+{
+  "generatedBy": "npm run verify:sources",
+  "sourceCount": 28,
+  "sources": [
+    {
+      "code": "ca-ircc-atom",
+      "name": "IRCC Newsroom (Atom API)",
+      "geo": "CA",
+      "transport": "ATOM",
+      "family": "RSS_ATOM",
+      "priority": "HIGH",
+      "enabled": true,
+      "schedule": "*/15 * * * *",
+      "cadenceMinutes": 15,
+      "backfillDepth": "2y",
+      "references": [
+        "R4"
+      ],
+      "appendixExempt": false,
+      "owner": "Immigration, Refugees and Citizenship Canada",
+      "officialUrl": "https://api.io.canada.ca/io-server/gc/news/en/v2",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "ca-ircc-notices",
+      "name": "IRCC Notices",
+      "geo": "CA",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "HIGH",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "3y",
+      "references": [
+        "R4"
+      ],
+      "appendixExempt": false,
+      "owner": "Immigration, Refugees and Citizenship Canada",
+      "officialUrl": "https://www.canada.ca/en/immigration-refugees-citizenship/news/notices.html",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "ca-study-permit-watch",
+      "name": "IRCC Study Permit rules watch",
+      "geo": "CA",
+      "transport": "WATCH",
+      "family": "CHANGE_WATCH",
+      "priority": "CRITICAL",
+      "enabled": true,
+      "schedule": "0 */6 * * *",
+      "cadenceMinutes": 360,
+      "backfillDepth": "Now onward",
+      "references": [
+        "R5"
+      ],
+      "appendixExempt": false,
+      "owner": "Immigration, Refugees and Citizenship Canada",
+      "officialUrl": "https://www.canada.ca/en/immigration-refugees-citizenship/services/study-canada/study-permit.html",
+      "freshnessSlaMinutes": 720,
+      "reconcile": "NONE"
+    },
+    {
+      "code": "uk-govuk-search-api",
+      "name": "GOV.UK Search API (UKVI / Home Office discovery)",
+      "geo": "UK",
+      "transport": "API",
+      "family": "JSON_API",
+      "priority": "HIGH",
+      "enabled": true,
+      "schedule": "*/15 * * * *",
+      "cadenceMinutes": 15,
+      "backfillDepth": "2y",
+      "references": [
+        "R1",
+        "R2"
+      ],
+      "appendixExempt": false,
+      "owner": "Government Digital Service / UKVI",
+      "officialUrl": "https://www.gov.uk/api/search.json",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "uk-govuk-content-api",
+      "name": "Immigration Rules: Statements of Changes (Content API)",
+      "geo": "UK",
+      "transport": "API",
+      "family": "JSON_API",
+      "priority": "CRITICAL",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "2021+",
+      "references": [
+        "R2",
+        "R3"
+      ],
+      "appendixExempt": false,
+      "owner": "Home Office / GOV.UK Content Store",
+      "officialUrl": "https://www.gov.uk/api/content/government/collections/immigration-rules-statement-of-changes",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "uk-immigration-rules-watch",
+      "name": "Student / Graduate / sponsor guidance watch",
+      "geo": "UK",
+      "transport": "WATCH",
+      "family": "CHANGE_WATCH",
+      "priority": "CRITICAL",
+      "enabled": false,
+      "schedule": "0 */6 * * *",
+      "cadenceMinutes": 360,
+      "backfillDepth": "Now onward",
+      "references": [
+        "R2",
+        "R3"
+      ],
+      "appendixExempt": false,
+      "owner": "Home Office / GOV.UK Content Store",
+      "officialUrl": "https://www.gov.uk/api/content/student-visa",
+      "freshnessSlaMinutes": 720,
+      "reconcile": "NONE"
+    },
+    {
+      "code": "au-study-australia-news",
+      "name": "Study Australia News",
+      "geo": "AU",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "HIGH",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "2y",
+      "references": [
+        "R6"
+      ],
+      "appendixExempt": false,
+      "owner": "Australian Trade and Investment Commission (Austrade)",
+      "officialUrl": "https://www.studyaustralia.gov.au/en/tools-and-resources/news",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "au-education-newsroom-rss",
+      "name": "Department of Education Newsroom (RSS)",
+      "geo": "AU",
+      "transport": "RSS",
+      "family": "RSS_ATOM",
+      "priority": "MEDIUM",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "2y",
+      "references": [
+        "R7"
+      ],
+      "appendixExempt": false,
+      "owner": "Australian Government Department of Education",
+      "officialUrl": "https://www.education.gov.au/newsroom/rss.xml",
+      "freshnessSlaMinutes": 60,
+      "reconcile": "WEEKLY"
+    },
+    {
+      "code": "au-homeaffairs-subclass500-watch",
+      "name": "Home Affairs Subclass 500 Student visa watch",
+      "geo": "AU",
+      "transport": "WATCH",
+      "family": "CHANGE_WATCH",
+      "priority": "CRITICAL",
+      "enabled": false,
+      "schedule": "0 */6 * * *",
+      "cadenceMinutes": 360,
+      "backfillDepth": "Now onward",
+      "references": [
+        "R9"
+      ],
+      "appendixExempt": false,
+      "owner": "Australian Department of Home Affairs",
+      "officialUrl": "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/student-500",
+      "freshnessSlaMinutes": 720,
+      "reconcile": "NONE"
+    },
+    {
+      "code": "au-education-monthly-data",
+      "name": "International Student monthly summary and data tables",
+      "geo": "AU",
+      "transport": "DATA",
+      "family": "DATA_FILE",
+      "priority": "LOW",
+      "enabled": true,
+      "schedule": "0 6 1 * *",
+      "cadenceMinutes": 43200,
+      "backfillDepth": "5y",
+      "references": [
+        "R8"
+      ],
+      "appendixExempt": false,
+      "owner": "Australian Government Department of Education",
+      "officialUrl": "https://www.education.gov.au/international-education-data-and-research/international-student-monthly-summary-and-data-tables",
+      "freshnessSlaMinutes": 86400,
+      "reconcile": "WEEKLY"
+    },
+    {
+      "code": "us-uscis-news-rss",
+      "name": "USCIS All News",
+      "geo": "US",
+      "transport": "RSS",
+      "family": "RSS_ATOM",
+      "priority": "MEDIUM",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "2y",
+      "references": [
+        "R10"
+      ],
+      "appendixExempt": false,
+      "owner": "U.S. Citizenship and Immigration Services",
+      "officialUrl": "https://www.uscis.gov/news/rss-feed/60288",
+      "freshnessSlaMinutes": 60,
+      "reconcile": "WEEKLY"
+    },
+    {
+      "code": "us-uscis-alerts",
+      "name": "USCIS Alerts",
+      "geo": "US",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "HIGH",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "2y",
+      "references": [
+        "R10"
+      ],
+      "appendixExempt": false,
+      "owner": "U.S. Citizenship and Immigration Services",
+      "officialUrl": "https://www.uscis.gov/newsroom/alerts",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "us-state-visas-news",
+      "name": "Department of State - U.S. Visas News",
+      "geo": "US",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "HIGH",
+      "enabled": false,
+      "schedule": "*/15 * * * *",
+      "cadenceMinutes": 15,
+      "backfillDepth": "3y",
+      "references": [
+        "R12"
+      ],
+      "appendixExempt": false,
+      "owner": "U.S. Department of State - Bureau of Consular Affairs",
+      "officialUrl": "https://travel.state.gov/content/travel/en/News/visas-news.html",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "us-state-study-exchange-watch",
+      "name": "State Department Study & Exchange (F/M/J) watch",
+      "geo": "US",
+      "transport": "WATCH",
+      "family": "CHANGE_WATCH",
+      "priority": "CRITICAL",
+      "enabled": false,
+      "schedule": "0 */6 * * *",
+      "cadenceMinutes": 360,
+      "backfillDepth": "Now onward",
+      "references": [
+        "R11"
+      ],
+      "appendixExempt": false,
+      "owner": "U.S. Department of State - Bureau of Consular Affairs",
+      "officialUrl": "https://travel.state.gov/content/travel/en/us-visas/study.html",
+      "freshnessSlaMinutes": 720,
+      "reconcile": "NONE"
+    },
+    {
+      "code": "us-ice-sevp-watch",
+      "name": "ICE / SEVP student guidance watch",
+      "geo": "US",
+      "transport": "WATCH",
+      "family": "CHANGE_WATCH",
+      "priority": "HIGH",
+      "enabled": false,
+      "schedule": "0 */12 * * *",
+      "cadenceMinutes": 720,
+      "backfillDepth": "Now onward",
+      "references": [],
+      "appendixExempt": true,
+      "owner": "U.S. Immigration and Customs Enforcement / SEVP",
+      "officialUrl": "https://studyinthestates.dhs.gov/students",
+      "freshnessSlaMinutes": 1440,
+      "reconcile": "NONE"
+    },
+    {
+      "code": "de-ffo-news-rss",
+      "name": "Federal Foreign Office - current articles (RSS)",
+      "geo": "DE",
+      "transport": "RSS",
+      "family": "RSS_ATOM",
+      "priority": "LOW",
+      "enabled": false,
+      "schedule": "0 * * * *",
+      "cadenceMinutes": 60,
+      "backfillDepth": "12m",
+      "references": [
+        "R13"
+      ],
+      "appendixExempt": false,
+      "owner": "German Federal Foreign Office",
+      "officialUrl": "https://www.auswaertiges-amt.de/en/newsroom/newsletter/rss/229868-229868",
+      "freshnessSlaMinutes": 120,
+      "reconcile": "WEEKLY"
+    },
+    {
+      "code": "de-ffo-press-releases-rss",
+      "name": "Federal Foreign Office - press releases and speeches (RSS)",
+      "geo": "DE",
+      "transport": "RSS",
+      "family": "RSS_ATOM",
+      "priority": "LOW",
+      "enabled": false,
+      "schedule": "0 * * * *",
+      "cadenceMinutes": 60,
+      "backfillDepth": "12m",
+      "references": [
+        "R13"
+      ],
+      "appendixExempt": false,
+      "owner": "German Federal Foreign Office",
+      "officialUrl": "https://www.auswaertiges-amt.de/en/newsroom/newsletter/rss/229870-229870",
+      "freshnessSlaMinutes": 120,
+      "reconcile": "WEEKLY"
+    },
+    {
+      "code": "de-make-it-in-germany-watch",
+      "name": "Make it in Germany - Visa for studying watch",
+      "geo": "DE",
+      "transport": "WATCH",
+      "family": "CHANGE_WATCH",
+      "priority": "CRITICAL",
+      "enabled": false,
+      "schedule": "0 */6 * * *",
+      "cadenceMinutes": 360,
+      "backfillDepth": "Now onward",
+      "references": [
+        "R13"
+      ],
+      "appendixExempt": false,
+      "owner": "Federal Ministry for Economic Affairs and Climate Action (Make it in Germany)",
+      "officialUrl": "https://www.make-it-in-germany.com/en/visa-residence/types/study-training/study",
+      "freshnessSlaMinutes": 720,
+      "reconcile": "NONE"
+    },
+    {
+      "code": "de-daad-news",
+      "name": "DAAD press, news and scholarship items",
+      "geo": "DE",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "MEDIUM",
+      "enabled": false,
+      "schedule": "0 * * * *",
+      "cadenceMinutes": 60,
+      "backfillDepth": "2y",
+      "references": [],
+      "appendixExempt": true,
+      "owner": "Deutscher Akademischer Austauschdienst (DAAD)",
+      "officialUrl": "https://www.daad.de/en/the-daad/communication-publications/press/press-releases/",
+      "freshnessSlaMinutes": 120,
+      "reconcile": "WEEKLY"
+    },
+    {
+      "code": "nz-immigration-news",
+      "name": "Immigration New Zealand News Centre",
+      "geo": "NZ",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "HIGH",
+      "enabled": true,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "3y",
+      "references": [
+        "R14"
+      ],
+      "appendixExempt": false,
+      "owner": "Immigration New Zealand",
+      "officialUrl": "https://www.immigration.govt.nz/about-us/news-centre",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "nz-pathway-student-watch",
+      "name": "Pathway Student Visa & post-study work guidance watch",
+      "geo": "NZ",
+      "transport": "WATCH",
+      "family": "CHANGE_WATCH",
+      "priority": "CRITICAL",
+      "enabled": false,
+      "schedule": "0 */6 * * *",
+      "cadenceMinutes": 360,
+      "backfillDepth": "Now onward",
+      "references": [
+        "R14"
+      ],
+      "appendixExempt": false,
+      "owner": "Immigration New Zealand",
+      "officialUrl": "https://www.immigration.govt.nz/new-zealand-visas/visas/visa/pathway-student-visa",
+      "freshnessSlaMinutes": 720,
+      "reconcile": "NONE"
+    },
+    {
+      "code": "ie-isd-news-updates",
+      "name": "Immigration Service Delivery - News and Updates",
+      "geo": "IE",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "HIGH",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "3y",
+      "references": [
+        "R15"
+      ],
+      "appendixExempt": false,
+      "owner": "Irish Department of Justice - Immigration Service Delivery",
+      "officialUrl": "https://www.irishimmigration.ie/news-and-updates/",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "ie-student-permission-watch",
+      "name": "ISD Student Permission / Stamp 2 rules watch",
+      "geo": "IE",
+      "transport": "WATCH",
+      "family": "CHANGE_WATCH",
+      "priority": "CRITICAL",
+      "enabled": false,
+      "schedule": "0 */6 * * *",
+      "cadenceMinutes": 360,
+      "backfillDepth": "Now onward",
+      "references": [
+        "R16"
+      ],
+      "appendixExempt": false,
+      "owner": "Irish Department of Justice - Immigration Service Delivery",
+      "officialUrl": "https://www.irishimmigration.ie/my-situation-has-changed-since-i-arrived-in-ireland/student-permission/",
+      "freshnessSlaMinutes": 720,
+      "reconcile": "NONE"
+    },
+    {
+      "code": "eu-press-corner-api",
+      "name": "European Commission Press Corner (Search + Document API)",
+      "geo": "EU",
+      "transport": "API",
+      "family": "JSON_API",
+      "priority": "HIGH",
+      "enabled": true,
+      "schedule": "*/15 * * * *",
+      "cadenceMinutes": 15,
+      "backfillDepth": "3y targeted",
+      "references": [
+        "R17",
+        "R18"
+      ],
+      "appendixExempt": false,
+      "owner": "European Commission - Spokesperson's Service",
+      "officialUrl": "https://ec.europa.eu/commission/presscorner/api/search",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "eu-commission-dept-news",
+      "name": "European Commission Department News",
+      "geo": "EU",
+      "transport": "RSS",
+      "family": "RSS_ATOM",
+      "priority": "MEDIUM",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "3y",
+      "references": [
+        "R17"
+      ],
+      "appendixExempt": false,
+      "owner": "European Commission",
+      "officialUrl": "https://commission.europa.eu/news-and-media_en",
+      "freshnessSlaMinutes": 60,
+      "reconcile": "WEEKLY"
+    },
+    {
+      "code": "eu-dg-home-news",
+      "name": "DG Migration and Home Affairs - News",
+      "geo": "EU",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "HIGH",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "3y",
+      "references": [
+        "R19"
+      ],
+      "appendixExempt": false,
+      "owner": "European Commission DG Migration and Home Affairs",
+      "officialUrl": "https://home-affairs.ec.europa.eu/news_en",
+      "freshnessSlaMinutes": 45,
+      "reconcile": "DAILY"
+    },
+    {
+      "code": "eu-education-area-news",
+      "name": "European Education Area - News",
+      "geo": "EU",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "MEDIUM",
+      "enabled": false,
+      "schedule": "*/30 * * * *",
+      "cadenceMinutes": 30,
+      "backfillDepth": "3y",
+      "references": [
+        "R20"
+      ],
+      "appendixExempt": false,
+      "owner": "European Commission - European Education Area",
+      "officialUrl": "https://education.ec.europa.eu/whats-new/news",
+      "freshnessSlaMinutes": 60,
+      "reconcile": "WEEKLY"
+    },
+    {
+      "code": "eu-erasmus-plus-news",
+      "name": "Erasmus+ News / Erasmus Mundus",
+      "geo": "EU",
+      "transport": "WEB",
+      "family": "WEB_LISTING",
+      "priority": "MEDIUM",
+      "enabled": false,
+      "schedule": "0 * * * *",
+      "cadenceMinutes": 60,
+      "backfillDepth": "3y",
+      "references": [
+        "R21"
+      ],
+      "appendixExempt": false,
+      "owner": "European Commission - Erasmus+",
+      "officialUrl": "https://erasmus-plus.ec.europa.eu/whats-new",
+      "freshnessSlaMinutes": 120,
+      "reconcile": "WEEKLY"
+    }
+  ]
+}

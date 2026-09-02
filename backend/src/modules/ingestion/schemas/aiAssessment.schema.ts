@@ -257,7 +257,10 @@ export const aiAssessmentSchema = aiAssessmentOutputSchema
 export type AiAssessment = z.infer<typeof aiAssessmentSchema>;
 
 // ============================================================
-// Routing (10.3)
+// Relevance
+//
+// The routing table itself lives in ; this file owns the
+// scores and the invariants, not the editorial decision.
 // ============================================================
 
 /**
@@ -273,41 +276,3 @@ export function headlineRelevance(scores: RelevanceBreakdown): number {
   );
 }
 
-export interface RouteThresholds {
-  autoDraftMinRelevance: number;
-  autoDraftMinConfidence: number;
-}
-
-/**
- * Blueprint 10.3 threshold table. Per-source overrides come from the registry's
- * `editorial` block; the criticals stay global.
- *
- *   0-29  IGNORE | 30-54 HOLD | 55-74 REVIEW
- *   75-89 + confidence >= 85  AUTO_DRAFT
- *   90+   + confidence >= 90  CRITICAL_DRAFT_ALERT
- */
-export function routeAssessment(
-  assessment: AiAssessmentOutput,
-  thresholds: RouteThresholds = { autoDraftMinRelevance: 75, autoDraftMinConfidence: 85 }
-): EditorialRoute {
-  const relevance = headlineRelevance(assessment);
-
-  // An item we could not classify never auto-drafts, however high it scored.
-  if (assessment.primaryCategory === "UNCLASSIFIED") {
-    return relevance >= 55 ? "REVIEW" : "HOLD";
-  }
-
-  if (relevance >= 90 && assessment.confidence >= 90) return "CRITICAL_DRAFT_ALERT";
-  if (
-    relevance >= thresholds.autoDraftMinRelevance &&
-    assessment.confidence >= thresholds.autoDraftMinConfidence
-  ) {
-    return "AUTO_DRAFT";
-  }
-  if (relevance >= 55) return "REVIEW";
-  if (relevance >= 30) return "HOLD";
-  return "IGNORE";
-}
-
-/** 10.3 launch safety: Phase 1 creates drafts, humans publish. Always. */
-export const PHASE1_AUTO_PUBLISH_ENABLED = false as const;

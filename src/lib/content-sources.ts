@@ -1,15 +1,19 @@
 /**
- * Automated Sources - client-side catalog and view types.
+ * Automated Sources - catalog, view types, and the API call with fallback.
  *
- * Mirrors the Phase 1 ingestion registry
- * (`backend/src/modules/ingestion/config/phase1Sources.ts`) for the Admin UI.
- * It is deliberately a separate, dependency-free copy: the admin shell must
- * render before any ingestion API exists, and the browser bundle should not pull
- * in the worker's validation stack.
+ * The catalog is NOT hand-maintained here. `src/lib/generated/phase1-sources.json`
+ * is written by `npm run verify:sources` from the ingestion registry, so the
+ * Admin shell shows the real 28 sources with their real families, schedules and
+ * Appendix A references even before Developer A's endpoints exist. Importing the
+ * registry module directly would pull Zod and the validation stack into the
+ * browser bundle; the snapshot is the seam.
  *
- * Day 2 replaces `getMockContentSources()` with `GET /admin/content-sources`;
- * the types stay as they are, so only the data function changes.
+ * Operational fields (health, lag, counters) are placeholders until the API
+ * answers. They are visibly labelled as such - see `DataOrigin` in the UI.
  */
+
+import snapshot from "@/lib/generated/phase1-sources.json";
+import { fetchWithFallback, type ApiResult } from "@/lib/ingestion-api";
 
 export const SOURCE_GEOS = ["CA", "UK", "AU", "US", "DE", "NZ", "IE", "EU"] as const;
 export type SourceGeo = (typeof SOURCE_GEOS)[number];
@@ -25,6 +29,7 @@ export const HEALTH_STATES = [
   "STALE",
   "ERROR",
   "BACKFILLING",
+  "UNKNOWN",
 ] as const;
 export type HealthState = (typeof HEALTH_STATES)[number];
 
@@ -52,17 +57,23 @@ export interface ContentSource {
   name: string;
   geo: SourceGeo;
   transport: TransportBadge;
+  family: string;
   priority: SourcePriority;
   enabled: boolean;
   /** Human-readable cadence, e.g. "15 min". */
   cadence: string;
-  /** Backfill depth from the source map, e.g. "2y" or "Now onward". */
+  cadenceMinutes: number;
   backfillDepth: string;
   /** Appendix A research references, e.g. ["R4"]. */
   references: string[];
+  appendixExempt: boolean;
   owner: string;
+  officialUrl: string;
+  freshnessSlaMinutes: number;
+  reconcile: string;
+
+  // Operational - from the API when available.
   health: HealthState;
-  /** Operational counters shown on the row; server-provided from Day 2. */
   lastSyncedAt: string | null;
   freshnessLagMinutes: number | null;
   itemsLast24h: number;
@@ -70,8 +81,29 @@ export interface ContentSource {
   errorsLast24h: number;
 }
 
-/** Minutes -> the cadence label used in the source map. */
-function cadenceLabel(minutes: number): string {
+interface SnapshotSource {
+  code: string;
+  name: string;
+  geo: string;
+  transport: string;
+  family: string;
+  priority: string;
+  enabled: boolean;
+  schedule: string;
+  cadenceMinutes: number;
+  backfillDepth: string;
+  references: string[];
+  appendixExempt: boolean;
+  owner: string;
+  officialUrl: string;
+  freshnessSlaMinutes: number;
+  reconcile: string;
+}
+
+const CATALOG = snapshot.sources as SnapshotSource[];
+
+/** Minutes -> the cadence label used in the Blueprint source map. */
+export function cadenceLabel(minutes: number): string {
   if (minutes >= 43_200) return "Monthly";
   if (minutes >= 1_440) return `${Math.round(minutes / 1_440)} d`;
   if (minutes >= 60) return `${Math.round(minutes / 60)} h`;
@@ -79,124 +111,125 @@ function cadenceLabel(minutes: number): string {
 }
 
 /**
- * The 28 Phase 1 sources, in Admin navigation order. Operational fields are
- * placeholders until the ingestion API lands; the catalog fields are real.
+ * Catalog rows with operational state left unknown.
+ *
+ * Deliberately not randomised: invented health badges on a screen an editor
+ * uses to decide whether a source is trustworthy would be worse than an honest
+ * "unknown". The UI pairs this with a visible fallback notice.
  */
-const PHASE1_CATALOG: Array<
-  Omit<
-    ContentSource,
-    | "health"
-    | "lastSyncedAt"
-    | "freshnessLagMinutes"
-    | "itemsLast24h"
-    | "candidatesLast24h"
-    | "errorsLast24h"
-    | "cadence"
-  > & { cadenceMinutes: number }
-> = [
-  // Canada [R4][R5]
-  { code: "ca-ircc-atom", name: "IRCC Newsroom (Atom API)", geo: "CA", transport: "ATOM", priority: "HIGH", enabled: true, cadenceMinutes: 15, backfillDepth: "2y", references: ["R4"], owner: "IRCC" },
-  { code: "ca-ircc-notices", name: "IRCC Notices", geo: "CA", transport: "WEB", priority: "HIGH", enabled: true, cadenceMinutes: 30, backfillDepth: "3y", references: ["R4"], owner: "IRCC" },
-  { code: "ca-study-permit-watch", name: "Study Permit rules watch", geo: "CA", transport: "WATCH", priority: "CRITICAL", enabled: true, cadenceMinutes: 360, backfillDepth: "Now onward", references: ["R5"], owner: "IRCC" },
+export function getCatalogSources(): ContentSource[] {
+  return CATALOG.map((source) => ({
+    code: source.code,
+    name: source.name,
+    geo: source.geo as SourceGeo,
+    transport: source.transport as TransportBadge,
+    family: source.family,
+    priority: source.priority as SourcePriority,
+    enabled: source.enabled,
+    cadence: cadenceLabel(source.cadenceMinutes),
+    cadenceMinutes: source.cadenceMinutes,
+    backfillDepth: source.backfillDepth,
+    references: source.references,
+    appendixExempt: source.appendixExempt,
+    owner: source.owner,
+    officialUrl: source.officialUrl,
+    freshnessSlaMinutes: source.freshnessSlaMinutes,
+    reconcile: source.reconcile,
+    health: "UNKNOWN",
+    lastSyncedAt: null,
+    freshnessLagMinutes: null,
+    itemsLast24h: 0,
+    candidatesLast24h: 0,
+    errorsLast24h: 0,
+  }));
+}
 
-  // United Kingdom [R1][R2][R3]
-  { code: "uk-govuk-search-api", name: "GOV.UK Search API (UKVI discovery)", geo: "UK", transport: "API", priority: "HIGH", enabled: true, cadenceMinutes: 15, backfillDepth: "2y", references: ["R1", "R2"], owner: "GDS / UKVI" },
-  { code: "uk-govuk-content-api", name: "Immigration Rules: Statements of Changes", geo: "UK", transport: "API", priority: "CRITICAL", enabled: true, cadenceMinutes: 30, backfillDepth: "2021+", references: ["R2", "R3"], owner: "Home Office" },
-  { code: "uk-immigration-rules-watch", name: "Student / Graduate / sponsor guidance watch", geo: "UK", transport: "WATCH", priority: "CRITICAL", enabled: true, cadenceMinutes: 360, backfillDepth: "Now onward", references: ["R2", "R3"], owner: "Home Office" },
-
-  // Australia [R6][R7][R8][R9]
-  { code: "au-study-australia-news", name: "Study Australia News", geo: "AU", transport: "WEB", priority: "HIGH", enabled: true, cadenceMinutes: 30, backfillDepth: "2y", references: ["R6"], owner: "Austrade" },
-  { code: "au-education-newsroom-rss", name: "Dept of Education Newsroom (RSS)", geo: "AU", transport: "RSS", priority: "MEDIUM", enabled: true, cadenceMinutes: 30, backfillDepth: "2y", references: ["R7"], owner: "Dept of Education" },
-  { code: "au-homeaffairs-subclass500-watch", name: "Subclass 500 Student visa watch", geo: "AU", transport: "WATCH", priority: "CRITICAL", enabled: true, cadenceMinutes: 360, backfillDepth: "Now onward", references: ["R9"], owner: "Home Affairs" },
-  { code: "au-education-monthly-data", name: "International Student monthly data", geo: "AU", transport: "DATA", priority: "LOW", enabled: true, cadenceMinutes: 43_200, backfillDepth: "5y", references: ["R8"], owner: "Dept of Education" },
-
-  // United States [R10][R11][R12]
-  { code: "us-uscis-news-rss", name: "USCIS All News", geo: "US", transport: "RSS", priority: "MEDIUM", enabled: true, cadenceMinutes: 30, backfillDepth: "2y", references: ["R10"], owner: "USCIS" },
-  { code: "us-uscis-alerts", name: "USCIS Alerts", geo: "US", transport: "WEB", priority: "HIGH", enabled: true, cadenceMinutes: 30, backfillDepth: "2y", references: ["R10"], owner: "USCIS" },
-  { code: "us-state-visas-news", name: "Dept of State - U.S. Visas News", geo: "US", transport: "WEB", priority: "HIGH", enabled: true, cadenceMinutes: 15, backfillDepth: "3y", references: ["R12"], owner: "Dept of State" },
-  { code: "us-state-study-exchange-watch", name: "Study & Exchange (F/M/J) watch", geo: "US", transport: "WATCH", priority: "CRITICAL", enabled: true, cadenceMinutes: 360, backfillDepth: "Now onward", references: ["R11"], owner: "Dept of State" },
-  { code: "us-ice-sevp-watch", name: "ICE / SEVP student guidance watch", geo: "US", transport: "WATCH", priority: "HIGH", enabled: true, cadenceMinutes: 720, backfillDepth: "Now onward", references: [], owner: "ICE / SEVP" },
-
-  // Germany [R13]
-  { code: "de-ffo-news-rss", name: "Federal Foreign Office - current articles", geo: "DE", transport: "RSS", priority: "LOW", enabled: true, cadenceMinutes: 60, backfillDepth: "12m", references: ["R13"], owner: "Federal Foreign Office" },
-  { code: "de-ffo-press-releases-rss", name: "Federal Foreign Office - press & speeches", geo: "DE", transport: "RSS", priority: "LOW", enabled: true, cadenceMinutes: 60, backfillDepth: "12m", references: ["R13"], owner: "Federal Foreign Office" },
-  { code: "de-make-it-in-germany-watch", name: "Make it in Germany - study visa watch", geo: "DE", transport: "WATCH", priority: "CRITICAL", enabled: true, cadenceMinutes: 360, backfillDepth: "Now onward", references: ["R13"], owner: "Make it in Germany" },
-  { code: "de-daad-news", name: "DAAD press, news and scholarships", geo: "DE", transport: "WEB", priority: "MEDIUM", enabled: true, cadenceMinutes: 60, backfillDepth: "2y", references: [], owner: "DAAD" },
-
-  // New Zealand [R14]
-  { code: "nz-immigration-news", name: "Immigration NZ News Centre", geo: "NZ", transport: "WEB", priority: "HIGH", enabled: true, cadenceMinutes: 30, backfillDepth: "3y", references: ["R14"], owner: "Immigration New Zealand" },
-  { code: "nz-pathway-student-watch", name: "Pathway Student & Post Study Work watch", geo: "NZ", transport: "WATCH", priority: "CRITICAL", enabled: true, cadenceMinutes: 360, backfillDepth: "Now onward", references: ["R14"], owner: "Immigration New Zealand" },
-
-  // Ireland [R15][R16]
-  { code: "ie-isd-news-updates", name: "ISD News and Updates", geo: "IE", transport: "WEB", priority: "HIGH", enabled: true, cadenceMinutes: 30, backfillDepth: "3y", references: ["R15"], owner: "Immigration Service Delivery" },
-  { code: "ie-student-permission-watch", name: "Student Permission / Stamp 2 watch", geo: "IE", transport: "WATCH", priority: "CRITICAL", enabled: true, cadenceMinutes: 360, backfillDepth: "Now onward", references: ["R16"], owner: "Immigration Service Delivery" },
-
-  // European Union [R17]-[R21]
-  { code: "eu-press-corner-api", name: "Commission Press Corner (Search + Documents)", geo: "EU", transport: "API", priority: "HIGH", enabled: true, cadenceMinutes: 15, backfillDepth: "3y targeted", references: ["R17", "R18"], owner: "European Commission" },
-  { code: "eu-commission-dept-news", name: "Commission Department News", geo: "EU", transport: "RSS", priority: "MEDIUM", enabled: true, cadenceMinutes: 30, backfillDepth: "3y", references: ["R17"], owner: "European Commission" },
-  { code: "eu-dg-home-news", name: "DG Migration and Home Affairs", geo: "EU", transport: "WEB", priority: "HIGH", enabled: true, cadenceMinutes: 30, backfillDepth: "3y", references: ["R19"], owner: "DG HOME" },
-  { code: "eu-education-area-news", name: "European Education Area", geo: "EU", transport: "WEB", priority: "MEDIUM", enabled: true, cadenceMinutes: 30, backfillDepth: "3y", references: ["R20"], owner: "European Commission" },
-  { code: "eu-erasmus-plus-news", name: "Erasmus+ / Erasmus Mundus", geo: "EU", transport: "WEB", priority: "MEDIUM", enabled: true, cadenceMinutes: 60, backfillDepth: "3y", references: ["R21"], owner: "Erasmus+" },
-];
-
-/**
- * Deterministic placeholder telemetry. Derived from the source code so the shell
- * looks alive and stable across renders without pretending to be live data -
- * and without hydration mismatches from `Math.random()`.
- */
-function placeholderTelemetry(
-  code: string,
-  cadenceMinutes: number,
-  now: number
-): Pick<
-  ContentSource,
-  | "health"
-  | "lastSyncedAt"
-  | "freshnessLagMinutes"
-  | "itemsLast24h"
-  | "candidatesLast24h"
-  | "errorsLast24h"
-> {
-  let seed = 0;
-  for (let i = 0; i < code.length; i += 1) {
-    seed = (seed * 31 + code.charCodeAt(i)) % 100_000;
-  }
-
-  const bucket = seed % 10;
-  const health: HealthState =
-    bucket === 9 ? "ERROR" : bucket === 8 ? "STALE" : bucket === 7 ? "DEGRADED" : bucket === 6 ? "BACKFILLING" : "HEALTHY";
-
-  const lagMinutes =
-    health === "STALE" ? cadenceMinutes * 4 + (seed % 60) : seed % Math.max(cadenceMinutes, 5);
-  const itemsLast24h = health === "ERROR" ? 0 : (seed % 17) + (cadenceMinutes <= 30 ? 3 : 0);
-
-  return {
-    health,
-    lastSyncedAt: new Date(now - lagMinutes * 60_000).toISOString(),
-    freshnessLagMinutes: lagMinutes,
-    itemsLast24h,
-    candidatesLast24h: Math.round(itemsLast24h / 3),
-    errorsLast24h: health === "ERROR" ? (seed % 5) + 1 : 0,
-  };
+/** Shape Developer A's `GET /admin/content-sources` is expected to return. */
+interface ApiContentSource {
+  code?: string;
+  id?: string;
+  name?: string;
+  health?: string;
+  lastSyncedAt?: string | null;
+  freshnessLagMinutes?: number | null;
+  itemsLast24h?: number;
+  candidatesLast24h?: number;
+  errorsLast24h?: number;
+  enabled?: boolean;
 }
 
 /**
- * Catalog plus placeholder operational state.
+ * Catalog joined with live operational state.
  *
- * `now` is passed in by the caller (set once on mount) so the shell renders the
- * same values on the server and the client.
+ * The catalog is authoritative for what a source *is* (family, schedule,
+ * references); the API is authoritative for how it is *doing*. Joining rather
+ * than replacing means a source the API has not seen yet still appears, instead
+ * of the list silently shrinking.
  */
-export function getMockContentSources(now: number = Date.parse("2026-09-01T09:00:00Z")): ContentSource[] {
-  return PHASE1_CATALOG.map(({ cadenceMinutes, ...source }) => ({
-    ...source,
-    cadence: cadenceLabel(cadenceMinutes),
-    ...placeholderTelemetry(source.code, cadenceMinutes, now),
-  }));
+export async function getContentSources(): Promise<ApiResult<ContentSource[]>> {
+  const catalog = getCatalogSources();
+
+  const result = await fetchWithFallback<ApiContentSource[]>(
+    "/admin/content-sources",
+    () => []
+  );
+
+  if (result.origin === "FALLBACK") {
+    return { data: catalog, origin: "FALLBACK", notice: result.notice };
+  }
+
+  const byCode = new Map(
+    result.data
+      .filter((row): row is ApiContentSource & { code: string } => Boolean(row.code))
+      .map((row) => [row.code, row])
+  );
+
+  return {
+    origin: "LIVE",
+    data: catalog.map((source) => {
+      const live = byCode.get(source.code);
+      if (!live) return source;
+      return {
+        ...source,
+        enabled: live.enabled ?? source.enabled,
+        health: normalizeHealth(live.health),
+        lastSyncedAt: live.lastSyncedAt ?? null,
+        freshnessLagMinutes: live.freshnessLagMinutes ?? null,
+        itemsLast24h: live.itemsLast24h ?? 0,
+        candidatesLast24h: live.candidatesLast24h ?? 0,
+        errorsLast24h: live.errorsLast24h ?? 0,
+      };
+    }),
+  };
+}
+
+/** A's health vocabulary (14.1) mapped onto the badges this UI renders. */
+function normalizeHealth(value: string | undefined): HealthState {
+  switch (value) {
+    case "HEALTHY":
+    case "LIVE":
+      return "HEALTHY";
+    case "DEGRADED":
+      return "DEGRADED";
+    case "STALE":
+      return "STALE";
+    case "BROKEN":
+    case "ERROR":
+    case "RATE_LIMITED":
+      return "ERROR";
+    case "BACKFILLING":
+      return "BACKFILLING";
+    default:
+      return "UNKNOWN";
+  }
 }
 
 /** Source counts per geography, for the tab filters (Blueprint 13.1). */
 export function getSourceCountsByGeo(sources: ContentSource[]): Record<SourceGeo, number> {
-  const counts = Object.fromEntries(SOURCE_GEOS.map((geo) => [geo, 0])) as Record<SourceGeo, number>;
+  const counts = Object.fromEntries(SOURCE_GEOS.map((geo) => [geo, 0])) as Record<
+    SourceGeo,
+    number
+  >;
   for (const source of sources) {
     counts[source.geo] += 1;
   }
@@ -218,13 +251,17 @@ export const HEALTH_LABELS: Record<HealthState, string> = {
   STALE: "Stale",
   ERROR: "Error",
   BACKFILLING: "Backfilling",
+  UNKNOWN: "No data",
 };
 
 /** Relative "x ago" label for the last-sync column. */
 export function formatLag(minutes: number | null): string {
-  if (minutes === null) return "Never";
+  if (minutes === null) return "—";
   if (minutes < 1) return "Just now";
   if (minutes < 60) return `${minutes} min ago`;
   if (minutes < 1_440) return `${Math.round(minutes / 60)} h ago`;
   return `${Math.round(minutes / 1_440)} d ago`;
 }
+
+export { triggerSync } from "@/lib/ingestion-api";
+export type { ApiResult, DataOrigin } from "@/lib/ingestion-api";
