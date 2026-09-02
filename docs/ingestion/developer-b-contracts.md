@@ -170,11 +170,26 @@ launch safety (Blueprint §10.3) is human-publish-only.
 | :--- | :--- | :--- |
 | `AI_PROVIDER` | `mock` | `mock` \| `anthropic`. Mock is the default so the Day-3 E2E never needs an API key. |
 | `ANTHROPIC_API_KEY` | — | Required only when `AI_PROVIDER=anthropic`. |
-| `AI_MODEL` | `claude-sonnet-5` | Model id recorded on every assessment. |
+| `AI_MODEL` | `claude-opus-5` | Model id recorded on every assessment. |
 | `INGESTION_DEV_CONTEXT` | unset | `1` enables B's in-memory harness stubs. Never set in production. |
 | `NEXT_PUBLIC_INGESTION_API` | unset | `1` makes the Admin UI call A's endpoints instead of the registry-seeded fallback. |
 
 ---
+
+## 6a. Running B's tests
+
+Adapter contract and pipeline tests use recorded fixtures and never touch the
+network (Blueprint §16.1). They are `.ts`, so they run under `tsx` rather than
+the repo's `npm test` (which is `node --test` over `.js`):
+
+    npx tsx --test "backend/src/modules/ingestion/__tests__/*.test.ts"
+
+18 tests: one per adapter family, the §18.1 EU Press Corner scenario, the
+category invariants, the routing gates, candidate idempotency, and a structural
+assertion that no code path in `candidate.service` writes `PUBLISHED`.
+
+Folding these into `npm test` needs a loader change in that script, which is a
+shared file — left for the merge.
 
 ## 7. Dependencies on Developer A
 
@@ -199,7 +214,12 @@ launch safety (Blueprint §10.3) is human-publish-only.
    touched today. **A must mount the ingestion router behind the same
    auth/role middleware as the other admin endpoints, and that middleware must
    be hardened, before cutover.**
-8. **`POST /content-sources/:id/sync`** is enqueue-only and must return promptly
+8. **Anthropic SDK (follow-up, not a blocker).** `ai/provider/anthropicProvider.ts`
+   calls the Messages API over raw `fetch` rather than `@anthropic-ai/sdk`,
+   because adding the dependency mid-sprint means a lockfile change and a
+   guaranteed conflict with A's branch. Post-merge, only `callApi()` changes.
+   The default provider is `mock`, so nothing depends on this today.
+9. **`POST /content-sources/:id/sync`** is enqueue-only and must return promptly
    with a run id; the Admin UI disables the button while a run is in flight and
    does not poll for completion today.
 
