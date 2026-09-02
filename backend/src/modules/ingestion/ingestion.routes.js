@@ -132,6 +132,56 @@ router.post("/content-sources/:id/reconcile", requireAdmin, async (req, res) => 
 });
 
 /**
+ * @route   POST /api/admin/content-sources/:id/backfill
+ * @desc    Partition historical date range and enqueue backfill window jobs
+ */
+router.post("/content-sources/:id/backfill", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate, windowDays } = req.body || {};
+
+    const { createBackfillRun } = await import("./services/backfill.service.js");
+
+    const result = await createBackfillRun({
+      contentSourceId: id,
+      startDate: startDate || new Date(Date.now() - 90 * 86400000),
+      endDate: endDate || new Date(),
+      windowDays: Number(windowDays) || 7,
+    });
+
+    return res.status(202).json({
+      success: true,
+      message: `Backfill run initiated with ${result.totalWindows} windows.`,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Failed to create backfill run:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to initiate backfill." });
+  }
+});
+
+/**
+ * @route   POST /api/admin/content-sources/seed
+ * @desc    Seed/sync all 28 Phase 1 catalog sources into the database
+ */
+router.post("/content-sources/seed", requireAdmin, async (req, res) => {
+  try {
+    const { seedPhase1Sources } = await import("./services/seedSources.js");
+    const result = await seedPhase1Sources();
+
+    return res.json({
+      success: true,
+      message: `Successfully synchronized ${result.total} Phase 1 sources (${result.seeded} created, ${result.updated} updated).`,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Failed to seed sources:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to seed sources." });
+  }
+});
+
+
+/**
  * @route   GET /api/admin/source-items
  * @desc    List ingested source items with pagination and status filters
  */

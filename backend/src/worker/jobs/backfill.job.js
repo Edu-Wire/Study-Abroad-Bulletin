@@ -1,7 +1,8 @@
+import { processBackfillWindow } from "../../modules/ingestion/services/backfill.service.js";
 import { JobNames } from "../../modules/ingestion/types.js";
 
 /**
- * Stub handler for historical backfill window jobs.
+ * Worker job handler for backfill window execution.
  *
  * @param {object} job
  * @param {object} job.data
@@ -11,16 +12,19 @@ import { JobNames } from "../../modules/ingestion/types.js";
  */
 export async function handleBackfillJob(job) {
   const payload = job?.data || {};
-  console.log(`[Job: ${JobNames.BACKFILL_WINDOW}] Received backfill window job:`, {
-    jobId: job?.id,
+  console.log(`[Job: ${JobNames.BACKFILL_WINDOW}] Executing backfill window: ${payload.backfillWindowId}`);
+
+  if (!payload.backfillWindowId) {
+    throw new Error("Missing required backfillWindowId in backfill job payload.");
+  }
+
+  const result = await processBackfillWindow({
     backfillWindowId: payload.backfillWindowId,
-    backfillRunId: payload.backfillRunId,
-    timestamp: new Date().toISOString(),
   });
 
   return {
-    status: "COMPLETED_STUB",
     jobName: JobNames.BACKFILL_WINDOW,
     backfillWindowId: payload.backfillWindowId,
+    ...result,
   };
 }

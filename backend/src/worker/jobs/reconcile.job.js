@@ -1,7 +1,8 @@
+import { processReconciliation } from "../../modules/ingestion/services/reconciliation.service.js";
 import { JobNames } from "../../modules/ingestion/types.js";
 
 /**
- * Stub handler for source reconciliation jobs.
+ * Worker job handler for source reconciliation and missed window repair.
  *
  * @param {object} job
  * @param {object} job.data
@@ -12,17 +13,21 @@ import { JobNames } from "../../modules/ingestion/types.js";
  */
 export async function handleReconcileJob(job) {
   const payload = job?.data || {};
-  console.log(`[Job: ${JobNames.SOURCE_RECONCILE}] Received reconciliation job:`, {
-    jobId: job?.id,
+  console.log(`[Job: ${JobNames.SOURCE_RECONCILE}] Reconciling source: ${payload.contentSourceId}`);
+
+  if (!payload.contentSourceId) {
+    throw new Error("Missing required contentSourceId in reconcile job payload.");
+  }
+
+  const result = await processReconciliation({
     contentSourceId: payload.contentSourceId,
     periodStart: payload.periodStart,
     periodEnd: payload.periodEnd,
-    timestamp: new Date().toISOString(),
   });
 
   return {
-    status: "COMPLETED_STUB",
     jobName: JobNames.SOURCE_RECONCILE,
     contentSourceId: payload.contentSourceId,
+    ...result,
   };
 }

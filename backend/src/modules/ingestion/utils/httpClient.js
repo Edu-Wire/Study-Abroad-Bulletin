@@ -294,3 +294,92 @@ export async function safeFetch(url, options = {}) {
 
   throw new Error(`Failed to complete HTTP request to ${url} after ${maxRetries + 1} attempts.`);
 }
+
+/**
+ * Creates an HttpFetcher instance conforming to Developer B's adapter interface.
+ *
+ * @param {object} [defaultOptions={}]
+ * @returns {import("../adapters/base/types").HttpFetcher}
+ */
+export function createHttpFetcher(defaultOptions = {}) {
+  return {
+    async getText(url, init = {}) {
+      const res = await safeFetch(url, {
+        method: "GET",
+        headers: init.headers,
+        etag: init.etag,
+        lastModified: init.lastModified,
+        timeoutMs: init.timeoutMs,
+        maxPayloadBytes: init.maxBytes,
+        ...defaultOptions,
+      });
+      return {
+        status: res.status,
+        body: res.text,
+        headers: res.headers,
+        etag: res.etag || undefined,
+        lastModified: res.lastModified || undefined,
+        notModified: res.notModified,
+        finalUrl: url,
+      };
+    },
+
+    async getJson(url, init = {}) {
+      const res = await safeFetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json, text/json, */*",
+          ...init.headers,
+        },
+        etag: init.etag,
+        lastModified: init.lastModified,
+        timeoutMs: init.timeoutMs,
+        maxPayloadBytes: init.maxBytes,
+        ...defaultOptions,
+      });
+
+      let parsedBody = null;
+      if (res.text && !res.notModified) {
+        try {
+          parsedBody = JSON.parse(res.text);
+        } catch (e) {
+          throw new Error(`Failed to parse JSON response from ${url}: ${e.message}`);
+        }
+      }
+
+      return {
+        status: res.status,
+        body: parsedBody,
+        headers: res.headers,
+        etag: res.etag || undefined,
+        lastModified: res.lastModified || undefined,
+        notModified: res.notModified,
+        finalUrl: url,
+      };
+    },
+
+    async getBinary(url, init = {}) {
+      const res = await safeFetch(url, {
+        method: "GET",
+        headers: init.headers,
+        etag: init.etag,
+        lastModified: init.lastModified,
+        timeoutMs: init.timeoutMs,
+        maxPayloadBytes: init.maxBytes,
+        ...defaultOptions,
+      });
+
+      const buffer = Buffer.from(res.text, "utf8");
+      return {
+        status: res.status,
+        body: new Uint8Array(buffer),
+        headers: res.headers,
+        etag: res.etag || undefined,
+        lastModified: res.lastModified || undefined,
+        notModified: res.notModified,
+        finalUrl: url,
+      };
+    },
+  };
+}
+
