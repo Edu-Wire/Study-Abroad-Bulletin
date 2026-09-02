@@ -71,7 +71,7 @@ export interface CandidateResult {
 export async function createOrUpdateCandidate(
   input: CandidateInput
 ): Promise<CandidateResult> {
-  const { source, sourceItem, document, assessment, repos, logger } = input;
+  const { source, sourceItem, assessment, repos, logger } = input;
 
   const decision = mapToCmsCategory(assessment);
   const draftPayload = await buildDraftPayload(input, decision.category);

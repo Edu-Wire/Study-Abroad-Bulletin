@@ -12,10 +12,10 @@
 import Link from "next/link";
 import { History, ArrowRight } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { getMockContentSources } from "@/lib/content-sources";
+import { getCatalogSources } from "@/lib/content-sources";
 
 export default function AdminSourceChangesPage() {
-  const watchedSources = getMockContentSources().filter(
+  const watchedSources = getCatalogSources().filter(
     (source) => source.transport === "WATCH"
   );
 

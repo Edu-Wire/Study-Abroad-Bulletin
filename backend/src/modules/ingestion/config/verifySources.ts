@@ -24,6 +24,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "../../../../..");
 const OUTPUT = resolve(REPO_ROOT, "docs/ingestion/appendix-a-traceability.md");
 
+/**
+ * Snapshot the registry for the Admin UI. The browser must not import the
+ * registry module itself - that would pull Zod and the whole validation stack
+ * into the client bundle - but the shell should still show the real 28 sources
+ * with their real families, schedules and Appendix A references.
+ */
+const UI_SNAPSHOT = resolve(REPO_ROOT, "src/lib/generated/phase1-sources.json");
+
 /** Appendix A official URLs, so the doc cites the research, not just the id. */
 const APPENDIX_A_URLS: Record<string, string> = {
   R1: "https://docs.publishing.service.gov.uk/repos/search-api/using-the-search-api.html",
@@ -151,6 +159,32 @@ ${buildTable(sources)}
 `;
 }
 
+/** The catalog fields the Admin UI needs. Operational state comes from the API. */
+function buildUiSnapshot(sources: SourceConfig[]) {
+  return {
+    generatedBy: "npm run verify:sources",
+    sourceCount: sources.length,
+    sources: sources.map((source) => ({
+      code: source.code,
+      name: source.name,
+      geo: source.geo,
+      transport: source.transport,
+      family: source.adapter,
+      priority: source.priority,
+      enabled: source.enabled,
+      schedule: source.schedule,
+      cadenceMinutes: source.cadenceMinutes,
+      backfillDepth: source.backfill.depth,
+      references: source.provenance.references,
+      appendixExempt: source.provenance.appendixExempt,
+      owner: source.provenance.owner,
+      officialUrl: source.discovery.url,
+      freshnessSlaMinutes: source.health.freshnessSlaMinutes,
+      reconcile: source.health.reconcile,
+    })),
+  };
+}
+
 function main(): void {
   // Re-validate from the raw inputs so the CLI exercises the same gate the
   // module load does, plus adapter resolution the registry cannot check itself.
@@ -163,10 +197,14 @@ function main(): void {
   mkdirSync(dirname(OUTPUT), { recursive: true });
   writeFileSync(OUTPUT, buildDocument(PHASE1_SOURCES), "utf8");
 
+  mkdirSync(dirname(UI_SNAPSHOT), { recursive: true });
+  writeFileSync(UI_SNAPSHOT, `${JSON.stringify(buildUiSnapshot(PHASE1_SOURCES), null, 2)}\n`, "utf8");
+
   const enabled = PHASE1_SOURCES.filter((source) => source.enabled).length;
   console.log(`✓ registry valid — ${PHASE1_SOURCES.length} sources, ${enabled} enabled`);
   console.log(`✓ every source resolves to an adapter; all five families present`);
   console.log(`✓ traceability written to ${OUTPUT}`);
+  console.log(`✓ Admin UI snapshot written to ${UI_SNAPSHOT}`);
 }
 
 main();

@@ -7,11 +7,14 @@
  * inside them, which is why this replaces the old "RSS Ingestion Feeds" framing:
  * only 6 of the 28 Phase 1 sources are actually feeds.
  *
- * Shell only. Data comes from `getMockContentSources()` until
- * `GET /admin/content-sources` exists; "Trigger Sync" simulates the enqueue.
+ * The catalog is seeded from the ingestion registry snapshot, so all 28
+ * configured sources appear with their real family, schedule and Appendix A
+ * references. Operational state comes from Developer A's
+ * `GET /admin/content-sources` when it is available; when it is not, the page
+ * says so rather than showing invented health figures.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Rss, RefreshCw, Settings2, ListTree } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer, AdminEmptyState } from "@/components/admin/AdminTable";
@@ -21,9 +24,12 @@ import {
   SOURCE_GEOS,
   TRANSPORT_LABELS,
   formatLag,
-  getMockContentSources,
+  getCatalogSources,
+  getContentSources,
   getSourceCountsByGeo,
+  triggerSync,
   type ContentSource,
+  type DataOrigin,
   type HealthState,
   type SourceGeo,
   type TransportBadge,
@@ -46,6 +52,7 @@ const HEALTH_STYLES: Record<HealthState, { badge: string; dot: string }> = {
   STALE: { badge: "bg-slate-500/10 text-slate-600 border-slate-500/20", dot: "bg-slate-400" },
   ERROR: { badge: "bg-rose-500/10 text-rose-700 border-rose-500/20", dot: "bg-rose-500" },
   BACKFILLING: { badge: "bg-blue-500/10 text-[#1769E0] border-blue-500/20", dot: "bg-[#1769E0]" },
+  UNKNOWN: { badge: "bg-slate-100 text-slate-500 border-slate-200", dot: "bg-slate-300" },
 };
 
 const PRIORITY_STYLES: Record<ContentSource["priority"], string> = {
@@ -56,13 +63,35 @@ const PRIORITY_STYLES: Record<ContentSource["priority"], string> = {
 };
 
 export default function AdminSourcesPage() {
-  // Frozen once per mount so server and client render identical placeholder
-  // telemetry; Day 2 swaps this whole call for the ingestion API.
-  const [sources] = useState<ContentSource[]>(() => getMockContentSources());
+  // Seeded from the registry snapshot so the first paint is the real catalog,
+  // then replaced with live operational state if the API answers.
+  const [sources, setSources] = useState<ContentSource[]>(() => getCatalogSources());
+  const [origin, setOrigin] = useState<DataOrigin>("FALLBACK");
+  const [originNotice, setOriginNotice] = useState<string | null>(null);
   const [geo, setGeo] = useState<GeoFilter>("ALL");
   const [search, setSearch] = useState("");
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getContentSources()
+      .then((result) => {
+        if (cancelled) return;
+        setSources(result.data);
+        setOrigin(result.origin);
+        setOriginNotice(result.notice ?? null);
+      })
+      .catch(() => {
+        // fetchWithFallback already degrades; this only catches a programming
+        // error, and the catalog is already on screen.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const counts = useMemo(() => getSourceCountsByGeo(sources), [sources]);
 
@@ -84,14 +113,14 @@ export default function AdminSourcesPage() {
     (source) => source.health === "ERROR" || source.health === "STALE"
   ).length;
 
-  const triggerSync = (source: ContentSource) => {
+  // Enqueue only: the button disables while the request is in flight so an
+  // editor cannot stack jobs on one source, and the page never polls for
+  // completion - a run's result arrives on the next load.
+  const handleSync = async (source: ContentSource) => {
     setSyncing((current) => ({ ...current, [source.code]: true }));
-    setNotice(`Queued a sync run for ${source.name}.`);
-    // Placeholder for the enqueue round-trip; the button stays disabled while
-    // a run is in flight so an editor cannot stack jobs on one source.
-    window.setTimeout(() => {
-      setSyncing((current) => ({ ...current, [source.code]: false }));
-    }, 1500);
+    const result = await triggerSync(source.code);
+    setNotice(`${source.name}: ${result.notice}`);
+    setSyncing((current) => ({ ...current, [source.code]: false }));
   };
 
   return (
@@ -102,6 +131,19 @@ export default function AdminSourcesPage() {
         count={sources.length}
         countLabel="sources"
       />
+
+      {origin === "FALLBACK" && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+          <span className="rounded bg-amber-200/70 px-1.5 py-0.5 font-bold uppercase tracking-wider text-[10px]">
+            Catalog only
+          </span>
+          <span>
+            Showing the configured registry. Sync status, health and counters are unavailable
+            until the ingestion API is running.
+          </span>
+          {originNotice && <span className="font-mono text-[11px] opacity-70">{originNotice}</span>}
+        </div>
+      )}
 
       {notice && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-blue-200/80 bg-blue-50 px-4 py-2.5 text-xs font-medium text-[#1769E0]">
@@ -115,7 +157,7 @@ export default function AdminSourcesPage() {
         </div>
       )}
 
-      {unhealthyCount > 0 && (
+      {origin === "LIVE" && unhealthyCount > 0 && (
         <div className="rounded-lg border border-amber-200/80 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-800">
           {unhealthyCount} source{unhealthyCount === 1 ? "" : "s"} outside the freshness SLA.
           Review before relying on today&apos;s candidate queue.
@@ -241,7 +283,7 @@ export default function AdminSourcesPage() {
                     <td className="py-3.5 px-4">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => triggerSync(source)}
+                          onClick={() => void handleSync(source)}
                           disabled={isSyncing}
                           title="Trigger Sync"
                           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:text-[#1769E0] hover:border-[#1769E0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
