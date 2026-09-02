@@ -1,29 +1,33 @@
+import { processDiscovery } from "../../modules/ingestion/services/discovery.service.js";
 import { JobNames } from "../../modules/ingestion/types.js";
 
 /**
- * Stub handler for source discovery jobs.
+ * Worker job handler for source discovery.
  *
  * @param {object} job
  * @param {object} job.data
  * @param {string} job.data.contentSourceId
+ * @param {string} [job.data.runType]
  * @param {string} [job.data.runId]
- * @param {string} [job.data.mode]
  * @returns {Promise<object>}
  */
 export async function handleDiscoverJob(job) {
   const payload = job?.data || {};
-  console.log(`[Job: ${JobNames.SOURCE_DISCOVER}] Received discovery job:`, {
-    jobId: job?.id,
+  console.log(`[Job: ${JobNames.SOURCE_DISCOVER}] Executing discovery for source: ${payload.contentSourceId}`);
+
+  if (!payload.contentSourceId) {
+    throw new Error("Missing required contentSourceId in discover job payload.");
+  }
+
+  const result = await processDiscovery({
     contentSourceId: payload.contentSourceId,
-    mode: payload.mode || "LIVE",
-    timestamp: new Date().toISOString(),
+    runType: payload.runType || payload.mode || "LIVE",
+    runId: payload.runId,
   });
 
-  // Plumbing stub: real adapter discovery will be connected in Day 2
   return {
-    status: "COMPLETED_STUB",
     jobName: JobNames.SOURCE_DISCOVER,
     contentSourceId: payload.contentSourceId,
-    itemsDiscovered: 0,
+    ...result,
   };
 }

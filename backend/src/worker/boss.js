@@ -33,12 +33,17 @@ export function getBoss() {
   return bossInstance;
 }
 
+let isBossStarted = false;
+
 /**
  * Starts the pg-boss background worker instance and ensures queues are created.
  */
 export async function startBoss() {
   const boss = getBoss();
-  await boss.start();
+  if (!isBossStarted) {
+    await boss.start();
+    isBossStarted = true;
+  }
 
   // In pg-boss v12+, create queues explicitly so workers can poll without error
   const allQueues = Object.values(JobNames);
@@ -65,6 +70,7 @@ export async function stopBoss() {
     console.log("⏳ [pg-boss] Stopping background queue service...");
     await bossInstance.stop({ graceful: true, timeout: 5000 });
     bossInstance = null;
+    isBossStarted = false;
     console.log("🛑 [pg-boss] Background queue service stopped.");
   }
 }
@@ -79,8 +85,17 @@ export async function stopBoss() {
  */
 export async function enqueueJob(queueName, data = {}, options = {}) {
   const boss = getBoss();
+  if (!isBossStarted) {
+    try {
+      await boss.start();
+      isBossStarted = true;
+    } catch (err) {
+      isBossStarted = true;
+    }
+  }
   return await boss.send(queueName, data, options);
 }
 
 export { JobNames };
 export default getBoss;
+

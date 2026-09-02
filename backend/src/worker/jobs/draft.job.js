@@ -1,7 +1,25 @@
+import { prisma } from "../../config/prisma.js";
 import { JobNames } from "../../modules/ingestion/types.js";
 
 /**
- * Stub handler for auto-creating draft articles from candidate assessments.
+ * Generates a URL-safe unique slug from a headline.
+ *
+ * @param {string} headline
+ * @returns {string}
+ */
+function slugify(headline) {
+  const base = headline
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
+  const randomSuffix = Math.random().toString(36).substring(2, 7);
+  return `${base.slice(0, 80)}-${randomSuffix}`;
+}
+
+/**
+ * Worker job handler for converting an approved/auto-drafted candidate into a CMS draft Article.
  *
  * @param {object} job
  * @param {object} job.data
@@ -11,16 +29,103 @@ import { JobNames } from "../../modules/ingestion/types.js";
  */
 export async function handleDraftJob(job) {
   const payload = job?.data || {};
-  console.log(`[Job: ${JobNames.CANDIDATE_DRAFT}] Received draft creation job:`, {
-    jobId: job?.id,
-    candidateId: payload.candidateId,
-    sourceItemId: payload.sourceItemId,
-    timestamp: new Date().toISOString(),
+  console.log(`[Job: ${JobNames.CANDIDATE_DRAFT}] Creating CMS draft for candidate: ${payload.candidateId}`);
+
+  if (!payload.candidateId) {
+    throw new Error("Missing required candidateId in draft job payload.");
+  }
+
+  const candidate = await prisma.articleCandidate.findUnique({
+    where: { id: payload.candidateId },
+    include: {
+      sourceItem: {
+        include: {
+          contentSource: true,
+          versions: {
+            orderBy: { versionNumber: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
   });
 
+  if (!candidate) {
+    throw new Error(`ArticleCandidate "${payload.candidateId}" not found.`);
+  }
+
+  const sourceItem = candidate.sourceItem;
+  const latestVersion = sourceItem?.versions[0] || null;
+
+  // Check if article is already linked or created
+  let article;
+  if (candidate.articleId) {
+    article = await prisma.article.findUnique({
+      where: { id: candidate.articleId },
+    });
+  }
+
+  if (!article) {
+    // Generate unique slug
+    const slug = slugify(candidate.headline);
+
+    // Create draft Article in existing CMS model
+    article = await prisma.article.create({
+      data: {
+        slug,
+        headline: candidate.headline,
+        summary: candidate.summary,
+        content: candidate.content || sourceItem?.summary || candidate.summary,
+        category: candidate.category || "VISA",
+        status: "DRAFT",
+        primaryCountryId: candidate.primaryCountryId || sourceItem?.countryId,
+        sourceUrl: sourceItem?.canonicalUrl || `https://source.local/${slug}`,
+        sourceName: sourceItem?.contentSource?.name || "Official Source",
+        publishedAt: sourceItem?.publishedAt || new Date(),
+        isRss: false,
+      },
+    });
+
+    // Update candidate with articleId and status
+    await prisma.articleCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        articleId: article.id,
+        status: "DRAFT_CREATED",
+      },
+    });
+  }
+
+  // Create provenance link in ArticleSourceLink
+  if (sourceItem) {
+    await prisma.articleSourceLink.upsert({
+      where: {
+        articleId_sourceItemId: {
+          articleId: article.id,
+          sourceItemId: sourceItem.id,
+        },
+      },
+      create: {
+        articleId: article.id,
+        sourceItemId: sourceItem.id,
+        versionId: latestVersion?.id || null,
+        linkType: "PRIMARY_SOURCE",
+      },
+      update: {
+        versionId: latestVersion?.id || null,
+      },
+    });
+
+    await prisma.sourceItem.update({
+      where: { id: sourceItem.id },
+      data: { processingStatus: "IMPORTED" },
+    });
+  }
+
   return {
-    status: "COMPLETED_STUB",
-    jobName: JobNames.CANDIDATE_DRAFT,
-    candidateId: payload.candidateId,
+    status: "DRAFT_CREATED",
+    candidateId: candidate.id,
+    articleId: article.id,
+    slug: article.slug,
   };
 }

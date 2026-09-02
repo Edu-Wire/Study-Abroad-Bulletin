@@ -1,26 +1,31 @@
+import { processDetail } from "../../modules/ingestion/services/detail.service.js";
 import { JobNames } from "../../modules/ingestion/types.js";
 
 /**
- * Stub handler for source detail enrichment jobs.
+ * Worker job handler for source item detail extraction and versioning.
  *
  * @param {object} job
  * @param {object} job.data
  * @param {string} job.data.sourceItemId
- * @param {string} [job.data.url]
+ * @param {string} [job.data.contentSourceId]
  * @returns {Promise<object>}
  */
 export async function handleDetailJob(job) {
   const payload = job?.data || {};
-  console.log(`[Job: ${JobNames.SOURCE_DETAIL}] Received detail job:`, {
-    jobId: job?.id,
+  console.log(`[Job: ${JobNames.SOURCE_DETAIL}] Fetching detail for item: ${payload.sourceItemId}`);
+
+  if (!payload.sourceItemId) {
+    throw new Error("Missing required sourceItemId in detail job payload.");
+  }
+
+  const result = await processDetail({
     sourceItemId: payload.sourceItemId,
-    url: payload.url,
-    timestamp: new Date().toISOString(),
+    contentSourceId: payload.contentSourceId,
   });
 
   return {
-    status: "COMPLETED_STUB",
     jobName: JobNames.SOURCE_DETAIL,
     sourceItemId: payload.sourceItemId,
+    ...result,
   };
 }
