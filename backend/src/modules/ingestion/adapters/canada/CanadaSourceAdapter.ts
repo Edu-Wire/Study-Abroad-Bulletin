@@ -29,6 +29,9 @@ import type { FeedEntry } from "../rssAtom/feedParse";
 export class CanadaIrccAtomAdapter extends RssAtomAdapter {
   protected readonly feedProvidesFullContent = false;
 
+  // Entries come from api.io.canada.ca but link to articles on canada.ca.
+  protected readonly linkBaseUrl = "https://www.canada.ca";
+
   /**
    * The Government of Canada news API returns bilingual entries on one feed;
    * the English filter is a query parameter but a French item still slips

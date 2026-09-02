@@ -34,6 +34,15 @@ export abstract class RssAtomAdapter extends BaseSourceAdapter {
    */
   protected readonly feedProvidesFullContent: boolean = false;
 
+  /**
+   * Base for resolving relative entry links. Feeds served from an API host
+   * (the Government of Canada news API, for one) carry links relative to the
+   * *publishing* site, so resolving against the feed URL would produce
+   * api.io.canada.ca/... instead of canada.ca/... A source whose feed and
+   * articles share an origin can leave this unset.
+   */
+  protected readonly linkBaseUrl: string | null = null;
+
   async discover(ctx: AdapterContext): Promise<DiscoveryPage> {
     const url = this.buildFeedUrl(ctx);
 
@@ -198,7 +207,7 @@ export abstract class RssAtomAdapter extends BaseSourceAdapter {
 
   /** Atom `id` / RSS `guid` is the identity; the resolved link is the fallback. */
   protected toDiscoveredItem(entry: FeedEntry, baseUrl: string): DiscoveredItem | null {
-    const link = this.resolveUrl(entry.link, baseUrl);
+    const link = this.resolveUrl(entry.link, this.linkBaseUrl ?? baseUrl);
     if (!link) return null;
 
     return {

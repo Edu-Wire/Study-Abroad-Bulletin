@@ -1327,6 +1327,8 @@ const EU_SOURCES: SourceConfigInput[] = [
         "Erasmus",
         "student mobility",
         "recognition of qualifications",
+        "professional qualifications",
+        "labour mobility",
         "legal migration",
         "researcher",
         "Blue Card",

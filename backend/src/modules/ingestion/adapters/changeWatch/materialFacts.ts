@@ -13,8 +13,13 @@
 
 import type { ExtractedFacts } from "../base/types";
 
-/** Sentences carrying an amount: visa fees, maintenance funds, tuition floors. */
-const MONEY = /(?:[£$€]\s?\d[\d,.]*|\b\d[\d,.]*\s?(?:CAD|AUD|NZD|USD|EUR|GBP)\b|\b(?:fee|cost|funds|financial (?:proof|evidence|requirement)|maintenance)\b)/i;
+/**
+ * Sentences carrying an amount: visa fees, maintenance funds, tuition floors.
+ * Currency codes appear on both sides of the number in government prose
+ * ("AUD 2,000" and "2,000 AUD" are both common), so both orders are matched.
+ */
+const MONEY =
+  /(?:[£$€]\s?\d[\d,.]*|\b(?:CAD|AUD|NZD|USD|EUR|GBP)\s?\d[\d,.]*|\b\d[\d,.]*\s?(?:CAD|AUD|NZD|USD|EUR|GBP)\b|\b(?:fee|charge|cost|funds|financial (?:proof|evidence|requirement)|maintenance)\b)/i;
 
 /** Processing times, application windows, effective dates, grace periods. */
 const TIME =
