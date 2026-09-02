@@ -24,7 +24,8 @@
     "start:api": "node backend/src/server.js",
     "worker": "node backend/src/worker/index.js",
     "db:rollout": "node scripts/rollout.mjs",
-    "db:rollout:apply": "node scripts/rollout.mjs --apply"
+    "db:rollout:apply": "node scripts/rollout.mjs --apply",
+    "verify:sources": "tsx backend/src/modules/ingestion/config/verifySources.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

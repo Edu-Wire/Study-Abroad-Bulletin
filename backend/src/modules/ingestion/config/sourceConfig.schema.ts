@@ -119,6 +119,13 @@ export const provenanceSchema = z.object({
   /** Blueprint section that specifies this source's handling rules. */
   blueprintSection: z.string().min(1),
   note: z.string().optional(),
+  /**
+   * A source the blueprint's 4.2/5 source map names without giving it a
+   * dedicated Appendix A entry. Validation refuses a reference-less source
+   * unless it is marked here AND explains itself in `note`, so nothing enters
+   * the registry untraceable by accident.
+   */
+  appendixExempt: z.boolean().default(false),
 });
 export type Provenance = z.infer<typeof provenanceSchema>;
 
@@ -199,6 +206,29 @@ export const editorialSchema = z.object({
 });
 export type EditorialConfig = z.infer<typeof editorialSchema>;
 
+export const healthSchema = z.object({
+  /**
+   * Blueprint 14: a high-priority source alerts past 45 minutes, everything
+   * else past twice its cadence. Derived from priority + cadence when omitted,
+   * so the rule lives in one place and a source can still override it.
+   */
+  freshnessSlaMinutes: z.number().int().positive(),
+  /** How often a closed range is re-queried to catch silently dropped pages. */
+  reconcile: z.enum(["DAILY", "WEEKLY", "MONTHLY", "NONE"]),
+});
+export type HealthConfig = z.infer<typeof healthSchema>;
+
+/**
+ * Per-source starting expectations for the deterministic prefilter, on the same
+ * 0-100 scale as the AI axes but never mistaken for an AI score. DG HOME starts
+ * higher than general Commission news (5.8); the FFO feeds start near the floor.
+ */
+export const relevancePriorsSchema = z.object({
+  studyAbroad: z.number().int().min(0).max(100),
+  scholarship: z.number().int().min(0).max(100),
+});
+export type RelevancePriors = z.infer<typeof relevancePriorsSchema>;
+
 export const prefilterSchema = z.object({
   /** Terms that raise the deterministic student signal (per-country rules, 5). */
   boostTerms: z.array(z.string()).default([]),
@@ -250,6 +280,13 @@ export const sourceConfigSchema = z
     editorial: editorialSchema,
     prefilter: prefilterSchema,
     provenance: provenanceSchema,
+    /**
+     * Derived from priority + cadence when omitted (see `deriveHealth`), so the
+     * Blueprint 14 rule is written once and a source can still override it.
+     */
+    health: healthSchema.optional(),
+    /** Derived from `editorial.relevancePrior` + authority type when omitted. */
+    relevancePriors: relevancePriorsSchema.optional(),
   })
   .strict()
   .superRefine((source, ctx) => {
@@ -274,7 +311,99 @@ export const sourceConfigSchema = z
         message: "Backfill-enabled sources must declare a startDate",
       });
     }
+    // Appendix C step 1: source ownership must be verified and documented.
+    if (source.provenance.references.length === 0 && !source.provenance.appendixExempt) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["provenance", "references"],
+        message:
+          "Every source needs an Appendix A reference, or provenance.appendixExempt with a note",
+      });
+    }
+    if (source.provenance.appendixExempt && !source.provenance.note) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["provenance", "note"],
+        message: "An Appendix-exempt source must explain itself in provenance.note",
+      });
+    }
+    if (!isValidCron(source.schedule)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["schedule"],
+        message: `Not a valid 5-field cron expression: '${source.schedule}'`,
+      });
+    }
+  })
+  .transform((source) => ({
+    ...source,
+    health: source.health ?? deriveHealth(source),
+    relevancePriors: source.relevancePriors ?? derivePriors(source),
+  }));
+
+/**
+ * Blueprint 14 freshness SLA. The flat 45-minute threshold applies only to
+ * high-priority sources polling faster than that: a 6-hour rule watch is
+ * CRITICAL but cannot be stale after 45 minutes, so it keeps 2x its cadence.
+ */
+function deriveHealth(source: {
+  priority: SourcePriority;
+  cadenceMinutes: number;
+  backfill: { enabled: boolean };
+}): HealthConfig {
+  const isHighPriority = source.priority === "CRITICAL" || source.priority === "HIGH";
+  return {
+    freshnessSlaMinutes:
+      isHighPriority && source.cadenceMinutes < 45 ? 45 : source.cadenceMinutes * 2,
+    // Reconciliation only means something for a source with a historical
+    // corpus to compare against; a change watch has no archive to re-query.
+    reconcile: !source.backfill.enabled ? "NONE" : isHighPriority ? "DAILY" : "WEEKLY",
+  };
+}
+
+/**
+ * A source's scholarship prior is deliberately much lower than its study-abroad
+ * prior everywhere except the mobility/education bodies. Blueprint 10.4: the
+ * scholarship label is earned by the document, never inherited from the feed.
+ */
+function derivePriors(source: {
+  authorityType: AuthorityType;
+  editorial: { relevancePrior: number };
+}): RelevancePriors {
+  const studyAbroad = source.editorial.relevancePrior;
+  const scholarshipLeaning = source.authorityType === "MOBILITY_EDUCATION";
+  return {
+    studyAbroad,
+    scholarship: scholarshipLeaning ? Math.round(studyAbroad * 0.6) : Math.min(15, studyAbroad),
+  };
+}
+
+/** Five-field cron, as consumed by the worker's scheduler. */
+export function isValidCron(expression: string): boolean {
+  const fields = expression.trim().split(/\s+/);
+  if (fields.length !== 5) return false;
+
+  const ranges: Array<[number, number]> = [
+    [0, 59],
+    [0, 23],
+    [1, 31],
+    [1, 12],
+    [0, 7],
+  ];
+
+  return fields.every((field, index) => {
+    const [min, max] = ranges[index];
+    return field.split(",").every((part) => {
+      const [range, step] = part.split("/");
+      if (step !== undefined && !/^\d+$/.test(step)) return false;
+      if (range === "*") return true;
+      const [start, end] = range.split("-");
+      const inRange = (value: string) =>
+        /^\d+$/.test(value) && Number(value) >= min && Number(value) <= max;
+      return end === undefined ? inRange(start) : inRange(start) && inRange(end);
+    });
   });
+}
 
 export type SourceConfig = z.infer<typeof sourceConfigSchema>;
 /** Authoring shape for the registry: schema defaults fill in the rest. */
