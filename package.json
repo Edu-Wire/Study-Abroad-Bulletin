@@ -22,7 +22,7 @@
     "lint:baseline": "node scripts/lint-baseline.mjs",
     "lint:baseline:update": "node scripts/lint-baseline.mjs --update",
     "start:api": "node backend/src/server.js",
-    "worker": "node backend/src/worker/index.js",
+    "worker": "node --import tsx backend/src/worker/index.js",
     "db:rollout": "node scripts/rollout.mjs",
     "db:rollout:apply": "node scripts/rollout.mjs --apply",
     "verify:sources": "tsx backend/src/modules/ingestion/config/verifySources.ts"

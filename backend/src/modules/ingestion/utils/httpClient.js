@@ -303,6 +303,46 @@ export async function safeFetch(url, options = {}) {
  */
 export function createHttpFetcher(defaultOptions = {}) {
   return {
+    async get(url, opts = {}) {
+      const etag = opts.conditional?.etag || opts.etag;
+      const lastModified = opts.conditional?.lastModified || opts.lastModified;
+      const timeoutMs = opts.timeoutMs;
+      const maxPayloadBytes = opts.maxBytes;
+
+      const res = await safeFetch(url, {
+        method: "GET",
+        headers: opts.headers,
+        etag,
+        lastModified,
+        timeoutMs,
+        maxPayloadBytes,
+        ...defaultOptions,
+      });
+
+      let body = res.text;
+      if (opts.responseType === "json") {
+        if (res.text && !res.notModified) {
+          try {
+            body = JSON.parse(res.text);
+          } catch (e) {
+            throw new Error(`Failed to parse JSON response from ${url}: ${e.message}`);
+          }
+        } else {
+          body = null;
+        }
+      } else if (opts.responseType === "buffer") {
+        body = res.text ? new Uint8Array(Buffer.from(res.text, "utf8")) : new Uint8Array();
+      }
+
+      return {
+        status: res.status,
+        headers: res.headers,
+        finalUrl: res.finalUrl || url,
+        body,
+        notModified: res.notModified,
+      };
+    },
+
     async getText(url, init = {}) {
       const res = await safeFetch(url, {
         method: "GET",

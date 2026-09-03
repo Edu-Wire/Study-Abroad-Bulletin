@@ -1,3 +1,8 @@
+import express from "express";
+import cors from "cors";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { XMLParser } from "fast-xml-parser";
 import { connectDB } from "./config/db.js";
 import { prisma } from "./config/prisma.js";
 import {
@@ -44,6 +49,7 @@ import {
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
 import ingestionRoutes from "./modules/ingestion/ingestion.routes.js";
 
+const app = express();
 const PORT = process.env.PORT || 8000;
 
 // Allowed origins for CORS with credentials

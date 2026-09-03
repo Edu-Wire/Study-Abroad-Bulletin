@@ -24,7 +24,31 @@ router.get("/content-sources", async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
 
-    return res.json({ success: true, data: sources });
+    const formatted = sources.map((source) => {
+      const lastSyncedAt = source.syncState?.lastSuccessAt
+        ? source.syncState.lastSuccessAt.toISOString()
+        : null;
+
+      let freshnessLagMinutes = null;
+      if (lastSyncedAt) {
+        freshnessLagMinutes = Math.max(
+          0,
+          Math.floor((Date.now() - new Date(lastSyncedAt).getTime()) / 60000)
+        );
+      }
+
+      return {
+        ...source,
+        health: source.syncState?.healthStatus || "HEALTHY",
+        lastSyncedAt,
+        freshnessLagMinutes,
+        itemsLast24h: source._count?.items || 0,
+        candidatesLast24h: 0,
+        errorsLast24h: source.syncState?.consecutiveFailures || 0,
+      };
+    });
+
+    return res.json({ success: true, data: formatted });
   } catch (error) {
     console.error("Failed to fetch content sources:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch content sources." });
@@ -38,12 +62,14 @@ router.get("/content-sources", async (req, res) => {
 router.get("/content-sources/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const source = await prisma.contentSource.findUnique({
-      where: { id },
+    // Support lookup by UUID (id) or by code (e.g. "ca-ircc-atom") — frontend sends code
+    const source = await prisma.contentSource.findFirst({
+      where: { OR: [{ id }, { code: id }] },
       include: {
         country: true,
         syncState: true,
         runs: { take: 10, orderBy: { startedAt: "desc" } },
+        _count: { select: { items: true, runs: true } },
       },
     });
 
@@ -51,7 +77,29 @@ router.get("/content-sources/:id", async (req, res) => {
       return res.status(404).json({ success: false, message: "Content source not found." });
     }
 
-    return res.json({ success: true, data: source });
+    const lastSyncedAt = source.syncState?.lastSuccessAt
+      ? source.syncState.lastSuccessAt.toISOString()
+      : null;
+
+    let freshnessLagMinutes = null;
+    if (lastSyncedAt) {
+      freshnessLagMinutes = Math.max(
+        0,
+        Math.floor((Date.now() - new Date(lastSyncedAt).getTime()) / 60000)
+      );
+    }
+
+    const formatted = {
+      ...source,
+      health: source.syncState?.healthStatus || "HEALTHY",
+      lastSyncedAt,
+      freshnessLagMinutes,
+      itemsLast24h: source._count?.items || 0,
+      candidatesLast24h: 0,
+      errorsLast24h: source.syncState?.consecutiveFailures || 0,
+    };
+
+    return res.json({ success: true, data: formatted });
   } catch (error) {
     console.error("Failed to fetch content source detail:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch content source." });
@@ -65,7 +113,8 @@ router.get("/content-sources/:id", async (req, res) => {
 router.post("/content-sources/:id/sync", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const source = await prisma.contentSource.findUnique({ where: { id } });
+    // Support lookup by UUID (id) or by code (e.g. "ca-ircc-atom") — frontend sends code
+    const source = await prisma.contentSource.findFirst({ where: { OR: [{ id }, { code: id }] } });
 
     if (!source) {
       return res.status(404).json({ success: false, message: "Content source not found." });
@@ -109,7 +158,8 @@ router.post("/content-sources/:id/reconcile", requireAdmin, async (req, res) => 
     const { id } = req.params;
     const { periodStart, periodEnd } = req.body || {};
 
-    const source = await prisma.contentSource.findUnique({ where: { id } });
+    // Support lookup by UUID (id) or by code — frontend sends code
+    const source = await prisma.contentSource.findFirst({ where: { OR: [{ id }, { code: id }] } });
     if (!source) {
       return res.status(404).json({ success: false, message: "Content source not found." });
     }
@@ -140,10 +190,17 @@ router.post("/content-sources/:id/backfill", requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { startDate, endDate, windowDays } = req.body || {};
 
+    // Resolve code → actual DB id for backfill service
+    const resolvedSource = await prisma.contentSource.findFirst({ where: { OR: [{ id }, { code: id }] } });
+    if (!resolvedSource) {
+      return res.status(404).json({ success: false, message: "Content source not found." });
+    }
+    const resolvedId = resolvedSource.id;
+
     const { createBackfillRun } = await import("./services/backfill.service.js");
 
     const result = await createBackfillRun({
-      contentSourceId: id,
+      contentSourceId: resolvedId,
       startDate: startDate || new Date(Date.now() - 90 * 86400000),
       endDate: endDate || new Date(),
       windowDays: Number(windowDays) || 7,
