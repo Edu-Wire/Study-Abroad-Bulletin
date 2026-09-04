@@ -88,7 +88,20 @@ test("Day 2 Ingestion Pipeline: Discovery upserts items and records SourceRun an
       canonicalUrl: testUrl,
       canonicalUrlHash: `hash-${Date.now()}`,
       title: "IRCC announces new international student visa updates for 2026",
-      summary: "Canada updates study permit quotas and PGWP requirements.",
+      // The canonical URL above is synthetic, so detail extraction fails and
+      // this summary becomes the document the classifier reads. It has to look
+      // like a real IRCC notice: a one-line stub scores below the relevance
+      // floor and is correctly routed away with no candidate, which would make
+      // this test assert that the pipeline drafts from a snippet — the exact
+      // defect Blueprint 10.4 exists to prevent.
+      summary:
+        "Immigration, Refugees and Citizenship Canada is updating the study permit " +
+        "requirements for every international student applying from outside Canada. " +
+        "A study permit application must now include a provincial attestation letter " +
+        "issued by the province of the designated learning institution. The " +
+        "post-graduation work permit (PGWP) field-of-study requirement continues to " +
+        "apply to each study permit holder, and an international student already " +
+        "holding a valid study permit does not need to reapply.",
       publishedAt: new Date(),
       countryId: "canada",
       processingStatus: "DETAIL_PENDING",
@@ -122,12 +135,40 @@ test("Day 2 Ingestion Pipeline: Discovery upserts items and records SourceRun an
   });
   assert.equal(totalVersions, 1, "Should not duplicate version on identical content");
 
+  // The canonical URL above is synthetic, so the stored version holds whatever
+  // canada.ca serves for a missing path — which makes the editorial outcome
+  // depend on a live site. Pin the classifier's input to a representative
+  // notice so this test asserts the pipeline, not today's 404 page.
+  await prisma.sourceDocumentVersion.update({
+    where: { id: version1.id },
+    data: {
+      cleanText: [
+        "Immigration, Refugees and Citizenship Canada is updating the study permit",
+        "requirements for every international student applying from outside Canada.",
+        "A study permit application must now include a provincial attestation letter",
+        "issued by the province of the designated learning institution named in the",
+        "application. A study permit application submitted without one will be returned.",
+        "The post-graduation work permit (PGWP) field-of-study requirement continues to",
+        "apply to each study permit holder. An international student already holding a",
+        "valid study permit does not need to reapply.",
+      ].join(" "),
+    },
+  });
+
   // Classification Job: Stage 1 prefilter & stage 2 assessment
   const classifyResult = await handleClassifyJob({
     data: { sourceItemId: item.id, versionId: version1.id },
   });
   assert.equal(classifyResult.status, "CLASSIFIED");
   assert.ok(classifyResult.candidateId);
+
+  // A study permit rule change with the full source loaded is the auto-draft
+  // lane, and the CMS category is resolved rather than guessed.
+  assert.ok(
+    ["AUTO_DRAFT", "CRITICAL_DRAFT_ALERT"].includes(classifyResult.route),
+    `expected a draft lane, got ${classifyResult.route}`
+  );
+  assert.equal(classifyResult.category, "VISA");
 
   const candidate = await prisma.articleCandidate.findUnique({
     where: { id: classifyResult.candidateId },

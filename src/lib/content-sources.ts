@@ -8,8 +8,9 @@
  * registry module directly would pull Zod and the validation stack into the
  * browser bundle; the snapshot is the seam.
  *
- * Operational fields (health, lag, counters) are placeholders until the API
- * answers. They are visibly labelled as such - see `DataOrigin` in the UI.
+ * Operational fields (health, lag, counters) come from the API. When it cannot
+ * be reached they stay at "unknown" rather than being invented, and the UI says
+ * the catalog is all it is showing - see `DataOrigin`.
  */
 
 import snapshot from "@/lib/generated/phase1-sources.json";
@@ -144,12 +145,13 @@ export function getCatalogSources(): ContentSource[] {
   }));
 }
 
-/** Shape Developer A's `GET /admin/content-sources` is expected to return. */
+/** Shape Developer A's `GET /admin/content-sources` returns. */
 interface ApiContentSource {
   code?: string;
   id?: string;
   name?: string;
   health?: string;
+  sourceType?: string;
   lastSyncedAt?: string | null;
   freshnessLagMinutes?: number | null;
   itemsLast24h?: number;
@@ -169,10 +171,7 @@ interface ApiContentSource {
 export async function getContentSources(): Promise<ApiResult<ContentSource[]>> {
   const catalog = getCatalogSources();
 
-  const result = await fetchWithFallback<ApiContentSource[]>(
-    "/admin/content-sources",
-    () => []
-  );
+  const result = await fetchWithFallback<ApiContentSource[]>("/content-sources", () => []);
 
   if (result.origin === "FALLBACK") {
     return { data: catalog, origin: "FALLBACK", notice: result.notice };
