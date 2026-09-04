@@ -48,6 +48,7 @@ import {
 } from "./validators/index.js";
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
 import ingestionRoutes from "./modules/ingestion/ingestion.routes.js";
+import { canonicalizeUrl } from "./modules/ingestion/utils/urlCanonicalizer.js";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -1355,6 +1356,47 @@ function normalizeRssEntry(entry, source) {
 // ============================================================
 
 /**
+ * Fetches and normalizes live entries for every enabled RSSSource matching
+ * `where`, deduped per-source by sourceUrl. Shared by the RSS preview route
+ * and the shadow-mode comparison route so both read the legacy feeds through
+ * one code path.
+ */
+async function fetchLegacyRssItems(where = { enabled: true }) {
+  const dbSources = await prisma.rSSSource.findMany({ where });
+  if (dbSources.length === 0) return [];
+
+  const feedResults = await Promise.allSettled(
+    dbSources.map(async (source) => {
+      const entries = await fetchAtomEntriesRaw(source.feedUrl, `RSS Preview ${source.id}`);
+      const items = [];
+      const seenUrls = new Set();
+
+      for (const entry of entries) {
+        const normalized = normalizeRssEntry(entry, source);
+        if (!normalized || seenUrls.has(normalized.sourceUrl)) continue;
+        seenUrls.add(normalized.sourceUrl);
+        items.push(normalized);
+      }
+
+      return items;
+    })
+  );
+
+  const allItems = [];
+  for (const result of feedResults) {
+    if (result.status === "fulfilled") allItems.push(...result.value);
+  }
+
+  allItems.sort((a, b) => {
+    const timeA = new Date(a.rawDate || 0).getTime();
+    const timeB = new Date(b.rawDate || 0).getTime();
+    return timeB - timeA;
+  });
+
+  return allItems;
+}
+
+/**
  * @route   GET /api/admin/rss/preview
  * @desc    Fetch live RSS items from all enabled sources and annotate
  *          each with whether it has already been imported into the DB.
@@ -1362,45 +1404,7 @@ function normalizeRssEntry(entry, source) {
  */
 app.get("/api/admin/rss/preview", ...requireEditor, async (req, res) => {
   try {
-    // Load all enabled RSSSource records from DB
-    const dbSources = await prisma.rSSSource.findMany({
-      where: { enabled: true },
-    });
-
-    if (dbSources.length === 0) {
-      return res.status(200).json({ success: true, items: [] });
-    }
-
-    // Fetch all feeds in parallel
-    const feedResults = await Promise.allSettled(
-      dbSources.map(async (source) => {
-        const entries = await fetchAtomEntriesRaw(source.feedUrl, `RSS Preview ${source.id}`);
-        const items = [];
-        const seenUrls = new Set();
-
-        for (const entry of entries) {
-          const normalized = normalizeRssEntry(entry, source);
-          if (!normalized || seenUrls.has(normalized.sourceUrl)) continue;
-          seenUrls.add(normalized.sourceUrl);
-          items.push(normalized);
-        }
-
-        return items;
-      })
-    );
-
-    // Flatten all items
-    const allItems = [];
-    for (const result of feedResults) {
-      if (result.status === "fulfilled") allItems.push(...result.value);
-    }
-
-    // Sort newest to oldest by publication date
-    allItems.sort((a, b) => {
-      const timeA = new Date(a.rawDate || 0).getTime();
-      const timeB = new Date(b.rawDate || 0).getTime();
-      return timeB - timeA;
-    });
+    const allItems = await fetchLegacyRssItems({ enabled: true });
 
     // Batch check which sourceUrls already exist in DB
     const allSourceUrls = allItems.map((i) => i.sourceUrl).filter(Boolean);
@@ -1427,6 +1431,101 @@ app.get("/api/admin/rss/preview", ...requireEditor, async (req, res) => {
   } catch (error) {
     console.error("RSS preview error:", error);
     return res.status(500).json({ success: false, message: "Failed to load RSS preview." });
+  }
+});
+
+const SHADOW_COMPARE_COUNTRY_IDS = { CA: "canada", UK: "uk" };
+
+/**
+ * @route   GET /api/admin/shadow-compare?geo=CA|UK
+ * @desc    Plan §5 shadow-mode check: diff what the legacy RSS feeds find live
+ *          right now against what the new ingestion engine has already
+ *          discovered and stored for the same country, by canonical URL.
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
+ */
+app.get("/api/admin/shadow-compare", ...requireEditor, async (req, res) => {
+  try {
+    const geo = String(req.query.geo || "").toUpperCase();
+    const countryId = SHADOW_COMPARE_COUNTRY_IDS[geo];
+    if (!countryId) {
+      return res.status(400).json({
+        success: false,
+        message: `geo must be one of: ${Object.keys(SHADOW_COMPARE_COUNTRY_IDS).join(", ")}`,
+      });
+    }
+
+    const [legacyItems, newItems] = await Promise.all([
+      fetchLegacyRssItems({ enabled: true, countryId }),
+      prisma.sourceItem.findMany({
+        where: { contentSource: { countryId } },
+        select: {
+          id: true,
+          title: true,
+          canonicalUrl: true,
+          publishedAt: true,
+          contentSource: { select: { code: true, name: true } },
+        },
+      }),
+    ]);
+
+    // Canonicalize both sides so an RSS feed's un-normalized link and the
+    // pipeline's stored canonicalUrl compare on equal footing. A malformed
+    // URL on either side is skipped rather than failing the whole comparison.
+    const safeCanonicalize = (rawUrl) => {
+      try {
+        return canonicalizeUrl(rawUrl);
+      } catch {
+        return null;
+      }
+    };
+    const legacyByUrl = new Map(
+      legacyItems
+        .map((item) => [safeCanonicalize(item.sourceUrl), item])
+        .filter(([url]) => url !== null)
+    );
+    const newByUrl = new Map(
+      newItems
+        .map((item) => [safeCanonicalize(item.canonicalUrl), item])
+        .filter(([url]) => url !== null)
+    );
+
+    const matched = [];
+    const oldOnly = [];
+    const newOnly = [];
+
+    for (const [url, legacyItem] of legacyByUrl) {
+      const newItem = newByUrl.get(url);
+      if (newItem) {
+        matched.push({ url, title: legacyItem.headline, publishedAt: legacyItem.rawDate || null });
+      } else {
+        oldOnly.push({ url, title: legacyItem.headline, publishedAt: legacyItem.rawDate || null });
+      }
+    }
+    for (const [url, newItem] of newByUrl) {
+      if (!legacyByUrl.has(url)) {
+        newOnly.push({
+          url,
+          title: newItem.title,
+          publishedAt: newItem.publishedAt,
+          source: newItem.contentSource?.name,
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        geo,
+        legacyCount: legacyByUrl.size,
+        newCount: newByUrl.size,
+        matched,
+        oldOnly,
+        newOnly,
+      },
+    });
+  } catch (error) {
+    console.error("Shadow compare error:", error);
+    return res.status(500).json({ success: false, message: "Failed to compute shadow comparison." });
   }
 });
 

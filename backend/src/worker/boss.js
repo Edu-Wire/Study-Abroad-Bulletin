@@ -16,10 +16,16 @@ export function getBoss() {
       throw new Error("DATABASE_URL environment variable is required to initialize pg-boss.");
     }
 
+    // ponytail: pg-boss opens its own pool, separate from config/prisma.js's.
+    // Both draw from the same DATABASE_POOL_MAX budget so one process (API or
+    // worker) can't alone exhaust a pooled provider's session cap — see
+    // config/prisma.js for why this matters against Supabase/Neon session mode.
+    const max = Number(process.env.DATABASE_POOL_MAX) || 3;
+
     bossInstance = new PgBoss({
       connectionString,
       schema: "pgboss",
-      max: 10,
+      max,
       retentionMinutes: 60 * 24 * 7, // 7 days retention
       archiveCompletedAfterSeconds: 60 * 60, // 1 hour
       deleteAfterDays: 14,

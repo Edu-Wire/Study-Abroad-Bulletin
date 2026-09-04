@@ -129,13 +129,29 @@ router.post("/content-sources/:id/sync", requireAdmin, async (req, res) => {
       },
     });
 
-    // Enqueue background discovery job via pg-boss
-    const jobId = await enqueueJob(JobNames.SOURCE_DISCOVER, {
-      contentSourceId: source.id,
-      runId: run.id,
-      mode: "MANUAL",
-      triggeredBy: req.user?.id || "admin",
-    });
+    // Enqueue background discovery job via pg-boss. If this throws, the run
+    // row above already exists — without marking it FAILED here it would sit
+    // at RUNNING forever with no job ever behind it (indistinguishable from a
+    // slow-but-healthy sync in the Source Runs UI).
+    let jobId;
+    try {
+      jobId = await enqueueJob(JobNames.SOURCE_DISCOVER, {
+        contentSourceId: source.id,
+        runId: run.id,
+        mode: "MANUAL",
+        triggeredBy: req.user?.id || "admin",
+      });
+    } catch (enqueueError) {
+      await prisma.sourceRun.update({
+        where: { id: run.id },
+        data: {
+          status: "FAILED",
+          finishedAt: new Date(),
+          errorMessage: enqueueError.message || "Failed to enqueue discovery job.",
+        },
+      });
+      throw enqueueError;
+    }
 
     return res.status(202).json({
       success: true,
@@ -234,6 +250,26 @@ router.post("/content-sources/seed", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error("Failed to seed sources:", error);
     return res.status(500).json({ success: false, message: error.message || "Failed to seed sources." });
+  }
+});
+
+/**
+ * @route   POST /api/admin/content-sources/migrate-legacy
+ * @desc    One-time/idempotent migration of legacy RSSSource rows into ContentSource (Plan §5)
+ */
+router.post("/content-sources/migrate-legacy", requireAdmin, async (req, res) => {
+  try {
+    const { migrateLegacyRssSources } = await import("./services/seedSources.js");
+    const result = await migrateLegacyRssSources();
+
+    return res.json({
+      success: true,
+      message: `Migrated ${result.total} legacy RSS sources (${result.migrated} created, ${result.updated} updated).`,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Failed to migrate legacy RSS sources:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to migrate legacy RSS sources." });
   }
 });
 
@@ -375,6 +411,94 @@ router.post("/source-items/:id/create-draft", async (req, res) => {
   } catch (error) {
     console.error("Failed to enqueue draft creation:", error);
     return res.status(500).json({ success: false, message: "Failed to enqueue draft creation." });
+  }
+});
+
+/**
+ * @route   POST /api/admin/source-items/:id/ignore
+ * @desc    Dismiss a candidate with an audited reason; source evidence is retained
+ */
+router.post("/source-items/:id/ignore", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    const candidate = await prisma.articleCandidate.findUnique({
+      where: { sourceItemId: id },
+    });
+
+    if (!candidate) {
+      return res.status(404).json({ success: false, message: "No candidate found for this source item." });
+    }
+
+    await prisma.articleCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        status: "IGNORED",
+        rejectionReason: reason || null,
+        reviewedByUserId: req.user?.id || null,
+        reviewedAt: new Date(),
+      },
+    });
+
+    return res.json({ success: true, message: "Candidate ignored." });
+  } catch (error) {
+    console.error("Failed to ignore candidate:", error);
+    return res.status(500).json({ success: false, message: "Failed to ignore candidate." });
+  }
+});
+
+/**
+ * @route   GET /api/admin/source-changes
+ * @desc    Material diffs from watched/versioned sources (newest first)
+ */
+router.get("/source-changes", async (req, res) => {
+  try {
+    const { sourceId, limit = "30" } = req.query;
+    const take = Math.min(Number(limit) || 30, 100);
+
+    // SourceDiff has no direct sourceItem relation — only priorVersion/nextVersion,
+    // each of which belongs to a SourceItem. Reach the item through nextVersion.
+    const diffs = await prisma.sourceDiff.findMany({
+      where: {
+        isMaterial: true,
+        ...(sourceId
+          ? { nextVersion: { sourceItem: { contentSourceId: String(sourceId) } } }
+          : {}),
+      },
+      include: {
+        priorVersion: { select: { id: true, versionNumber: true, capturedAt: true } },
+        nextVersion: {
+          select: {
+            id: true,
+            versionNumber: true,
+            capturedAt: true,
+            sourceItem: {
+              select: {
+                id: true,
+                title: true,
+                canonicalUrl: true,
+                contentSource: { select: { id: true, name: true, code: true, sourceType: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { detectedAt: "desc" },
+      take,
+    });
+
+    // Reshape so the response keeps a top-level sourceItem, matching the shape
+    // the source-items list/detail routes already return.
+    const formatted = diffs.map((diff) => {
+      const { sourceItem, ...nextVersion } = diff.nextVersion;
+      return { ...diff, sourceItem, nextVersion };
+    });
+
+    return res.json({ success: true, data: formatted });
+  } catch (error) {
+    console.error("Failed to fetch source changes:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch source changes." });
   }
 });
 

@@ -97,33 +97,48 @@ export async function fetchWithFallback<T>(
 }
 
 /**
- * Enqueue a sync run. Returns whether the request was accepted; the caller
- * shows optimistic state either way and never polls for completion.
+ * Fire a state-changing action (enqueue a job, apply an editorial decision).
+ * Returns whether the request was accepted; callers show optimistic state
+ * either way and never poll for completion — a run's result arrives on the
+ * next load.
  */
-export async function triggerSync(
-  sourceId: string
+export async function postAction(
+  path: string,
+  body?: Record<string, unknown>
 ): Promise<{ accepted: boolean; notice: string }> {
   if (!liveApiEnabled()) {
     return {
       accepted: false,
-      notice: "Sync not sent: live ingestion API is disabled in this environment.",
+      notice: "Not sent: live ingestion API is disabled in this environment.",
     };
   }
 
   try {
-    const response = await fetch(
-      `${API_BASE_PATH}/admin/content-sources/${encodeURIComponent(sourceId)}/sync`,
-      { method: "POST", credentials: "include", headers: { "content-type": "application/json" } }
-    );
+    const response = await fetch(`${API_BASE_PATH}${path}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const payload = await response.json().catch(() => null);
 
     if (response.ok) {
-      return { accepted: true, notice: "Sync run queued." };
+      return { accepted: true, notice: (payload && payload.message) || "Request accepted." };
     }
     if (response.status === 401 || response.status === 403) {
-      return { accepted: false, notice: "Not authorised to trigger a sync run." };
+      return { accepted: false, notice: "Not authorised for this action." };
     }
-    return { accepted: false, notice: `Sync request failed (${response.status}).` };
+    return {
+      accepted: false,
+      notice: (payload && payload.message) || `Request failed (${response.status}).`,
+    };
   } catch {
-    return { accepted: false, notice: "Could not reach the ingestion API to queue a sync." };
+    return { accepted: false, notice: "Could not reach the ingestion API." };
   }
+}
+
+/** Enqueue a manual sync run for a content source. */
+export async function triggerSync(sourceId: string): Promise<{ accepted: boolean; notice: string }> {
+  return postAction(`/admin/content-sources/${encodeURIComponent(sourceId)}/sync`);
 }

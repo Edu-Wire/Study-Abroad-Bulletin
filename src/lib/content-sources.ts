@@ -263,5 +263,66 @@ export function formatLag(minutes: number | null): string {
   return `${Math.round(minutes / 1_440)} d ago`;
 }
 
+/** `GET /admin/content-sources/:id` shape — the catalog plus DB-native operational detail. */
+export interface ContentSourceDetail {
+  id: string;
+  code: string;
+  name: string;
+  sourceType: string;
+  baseUrl: string;
+  feedUrl: string | null;
+  enabled: boolean;
+  disabledReason: string | null;
+  schedule: string | null;
+  categoryHint: string | null;
+  config: Record<string, unknown> | null;
+  country: { id: string; name: string; flag: string; code: string } | null;
+  health: HealthState;
+  lastSyncedAt: string | null;
+  freshnessLagMinutes: number | null;
+  itemsLast24h: number;
+  errorsLast24h: number;
+  syncState: {
+    cursor: string | null;
+    lastSuccessAt: string | null;
+    lastFailureAt: string | null;
+    lastErrorMessage: string | null;
+    consecutiveFailures: number;
+    healthStatus: string;
+  } | null;
+  runs: Array<{
+    id: string;
+    runType: string;
+    status: string;
+    startedAt: string;
+    finishedAt: string | null;
+    itemsFound: number;
+    itemsCreated: number;
+    errorMessage: string | null;
+  }>;
+}
+
+/** Content source detail by DB id or registry code — no static fallback: this is operational data. */
+export async function getContentSourceDetail(idOrCode: string): Promise<ApiResult<ContentSourceDetail | null>> {
+  const result = await fetchWithFallback<ApiRawContentSourceDetail | null>(
+    `/admin/content-sources/${encodeURIComponent(idOrCode)}`,
+    () => null
+  );
+
+  if (!result.data) return { ...result, data: null };
+
+  return {
+    ...result,
+    data: {
+      ...result.data,
+      health: normalizeHealth(result.data.health),
+    },
+  };
+}
+
+interface ApiRawContentSourceDetail extends Omit<ContentSourceDetail, "health"> {
+  health?: string;
+}
+
 export { triggerSync } from "@/lib/ingestion-api";
 export type { ApiResult, DataOrigin } from "@/lib/ingestion-api";

@@ -112,3 +112,81 @@ export async function seedPhase1Sources() {
 
   return { seeded, updated, total: PHASE1_SOURCES.length };
 }
+
+/**
+ * Migrates every legacy RSSSource row into ContentSource, per the alignment
+ * plan's Section 5 step 2: preserve feed URL, country, active state and
+ * category as legacy metadata. Idempotent (upsert by a `legacy-` prefixed
+ * code) and additive only — it never touches or deletes the RSSSource rows,
+ * so the old preview/import routes keep working during the shadow period.
+ *
+ * @returns {Promise<{ migrated: number, updated: number, total: number }>}
+ */
+export async function migrateLegacyRssSources() {
+  const rssSources = await prisma.rSSSource.findMany();
+
+  let migrated = 0;
+  let updated = 0;
+
+  for (const rss of rssSources) {
+    const code = `legacy-${rss.id}`;
+
+    let baseUrl = rss.feedUrl;
+    try {
+      const parsed = new URL(rss.feedUrl);
+      baseUrl = `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      // Keep the raw feedUrl as baseUrl if it does not parse as an absolute URL.
+    }
+
+    const existing = await prisma.contentSource.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+
+    const contentSource = await prisma.contentSource.upsert({
+      where: { code },
+      create: {
+        code,
+        name: rss.name,
+        countryId: rss.countryId,
+        sourceType: "RSS",
+        baseUrl,
+        feedUrl: rss.feedUrl,
+        enabled: rss.enabled,
+        disabledReason: rss.disabledReason,
+        categoryHint: rss.category,
+        config: {
+          legacy: true,
+          legacyRssSourceId: rss.id,
+          legacySourceType: rss.sourceType,
+          slugPrefix: rss.slugPrefix,
+          fallbackImage: rss.fallbackImage,
+        },
+      },
+      update: {
+        name: rss.name,
+        countryId: rss.countryId,
+        baseUrl,
+        feedUrl: rss.feedUrl,
+        enabled: rss.enabled,
+        disabledReason: rss.disabledReason,
+        categoryHint: rss.category,
+      },
+    });
+
+    await prisma.sourceSyncState.upsert({
+      where: { contentSourceId: contentSource.id },
+      create: { contentSourceId: contentSource.id, healthStatus: "HEALTHY" },
+      update: {},
+    });
+
+    if (existing) {
+      updated++;
+    } else {
+      migrated++;
+    }
+  }
+
+  return { migrated, updated, total: rssSources.length };
+}

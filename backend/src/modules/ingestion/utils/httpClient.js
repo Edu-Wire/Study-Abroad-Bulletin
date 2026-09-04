@@ -10,6 +10,10 @@
  * - SSRF protection against private / loopback IP ranges
  */
 
+import dns from "node:dns";
+
+const dnsLookup = dns.promises.lookup;
+
 const DEFAULT_TIMEOUT_MS = 15000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BACKOFF_BASE_MS = 500;
@@ -53,6 +57,61 @@ export function isPrivateOrReservedHost(hostname) {
   if (/^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
 
   return false;
+}
+
+/**
+ * Checks whether a resolved IP address (v4 or v6) is private, loopback, or
+ * cloud-metadata. Same ranges as `isPrivateOrReservedHost`, applied to the
+ * address a hostname actually resolved to.
+ *
+ * @param {string} address
+ * @param {"IPv4"|"IPv6"} family
+ * @returns {boolean}
+ */
+export function isPrivateOrReservedIp(address, family) {
+  if (!address) return true;
+
+  if (family === "IPv6" || address.includes(":")) {
+    const host = address.toLowerCase();
+    if (host === "::1" || host === "::") return true;
+    if (host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) return true;
+    // ::ffff:a.b.c.d IPv4-mapped addresses — re-check the embedded IPv4 part.
+    const mapped = host.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+    if (mapped) return isPrivateOrReservedHost(mapped[1]);
+    return false;
+  }
+
+  return isPrivateOrReservedHost(address);
+}
+
+/**
+ * Resolves a hostname and rejects it if it points at a private/reserved
+ * address — blocks DNS rebinding, where a hostname that looked public at URL
+ * validation time resolves to an internal IP by the time it's fetched.
+ *
+ * ponytail: resolves via dns.lookup but still hands the original hostname to
+ * fetch(), which re-resolves independently — a narrow TOCTOU window remains
+ * if the DNS answer changes between these two lookups. Closing it fully needs
+ * pinning the resolved IP on the actual socket (a custom undici dispatcher).
+ * Not worth it while every source URL comes from trusted admin config, not
+ * arbitrary user input; revisit if admin-added arbitrary URLs are ever allowed.
+ *
+ * @param {string} hostname
+ * @returns {Promise<void>}
+ */
+async function assertPublicHost(hostname) {
+  let resolved;
+  try {
+    resolved = await dnsLookup(hostname);
+  } catch (err) {
+    throw new Error(`DNS resolution failed for host "${hostname}": ${err.message}`);
+  }
+
+  if (isPrivateOrReservedIp(resolved.address, resolved.family === 6 ? "IPv6" : "IPv4")) {
+    throw new Error(
+      `SSRF Security Violation: Host "${hostname}" resolves to private/reserved address "${resolved.address}".`
+    );
+  }
 }
 
 /**
@@ -153,6 +212,9 @@ export async function safeFetch(url, options = {}) {
         throw new Error(
           `SSRF Security Violation: Access to private or loopback host "${parsedUrl.hostname}" is denied.`
         );
+      }
+      if (!allowPrivateIps) {
+        await assertPublicHost(parsedUrl.hostname);
       }
 
       // Build request headers

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   safeFetch,
   isPrivateOrReservedHost,
+  isPrivateOrReservedIp,
   parseRetryAfter,
   calculateBackoffWithJitter,
 } from "../../backend/src/modules/ingestion/utils/httpClient.js";
@@ -16,6 +17,16 @@ test("HTTP Client: detects and blocks private / loopback IP addresses (SSRF)", (
   assert.equal(isPrivateOrReservedHost("::1"), true);
   assert.equal(isPrivateOrReservedHost("gov.uk"), false);
   assert.equal(isPrivateOrReservedHost("canada.ca"), false);
+});
+
+test("HTTP Client: detects private/reserved resolved IPs (DNS rebinding guard)", () => {
+  assert.equal(isPrivateOrReservedIp("127.0.0.1", "IPv4"), true);
+  assert.equal(isPrivateOrReservedIp("169.254.169.254", "IPv4"), true);
+  assert.equal(isPrivateOrReservedIp("8.8.8.8", "IPv4"), false);
+  assert.equal(isPrivateOrReservedIp("::1", "IPv6"), true);
+  assert.equal(isPrivateOrReservedIp("fd00::1", "IPv6"), true);
+  assert.equal(isPrivateOrReservedIp("::ffff:127.0.0.1", "IPv6"), true);
+  assert.equal(isPrivateOrReservedIp("2001:4860:4860::8888", "IPv6"), false);
 });
 
 test("HTTP Client: parses Retry-After seconds and HTTP dates", () => {

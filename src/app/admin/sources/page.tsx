@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Rss, RefreshCw, Settings2, ListTree } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer, AdminEmptyState } from "@/components/admin/AdminTable";
@@ -291,20 +292,20 @@ export default function AdminSourcesPage() {
                           <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
                           {isSyncing ? "Syncing" : "Sync"}
                         </button>
-                        <button
-                          onClick={() => setNotice(`Item view for ${source.name} arrives with the ingestion API.`)}
+                        <Link
+                          href={`/admin/source-items?sourceId=${source.code}`}
                           title="View Items"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-[#1769E0] hover:bg-blue-50 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-[#1769E0] hover:bg-blue-50 transition-colors"
                         >
                           <ListTree className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setNotice(`Configuration for ${source.name} is registry-managed in Phase 1.`)}
-                          title="Configure"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-[#1769E0] hover:bg-blue-50 transition-colors cursor-pointer"
+                        </Link>
+                        <Link
+                          href={`/admin/sources/${source.code}`}
+                          title="Source Detail"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-[#1769E0] hover:bg-blue-50 transition-colors"
                         >
                           <Settings2 className="h-4 w-4" />
-                        </button>
+                        </Link>
                       </div>
                     </td>
                   </tr>
