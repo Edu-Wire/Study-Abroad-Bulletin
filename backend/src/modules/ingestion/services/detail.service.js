@@ -85,27 +85,43 @@ export async function processDetail({ sourceItemId, contentSourceId }) {
     sourceDetail = await adapter.fetchDetail(discoveredItem, adapterContext);
     normalizedDoc = await adapter.normalize(sourceDetail, discoveredItem, adapterContext);
   } catch (adapterErr) {
+    // Detail extraction failed. The discovery summary stands in so the item is
+    // still visible in Admin, but `detailStatus: FAILED` is recorded with it:
+    // the routing policy refuses to auto-draft anything that is not ENRICHED,
+    // so a snippet can never reach the CMS as if it were the full source.
+    console.warn(
+      `[${sourceConfig.code}:detail] Detail extraction failed for ${sourceItem.id}: ${adapterErr?.message}`
+    );
     sourceDetail = {
       url: discoveredItem.url,
       title: discoveredItem.title,
       rawBody: sourceItem.summary || sourceItem.title,
+      detailStatus: "FAILED",
       httpStatus: 200,
     };
     normalizedDoc = {
       title: sourceItem.title,
-      summary: sourceItem.summary || sourceItem.title,
+      sourceSummary: sourceItem.summary || sourceItem.title,
       cleanHtml: `<p>${sourceItem.summary || sourceItem.title}</p>`,
-      cleanText: sourceItem.summary || sourceItem.title,
+      fullText: sourceItem.summary || sourceItem.title,
       authors: [],
+      rawMetadata: { detailStatus: "FAILED", detailError: String(adapterErr?.message || adapterErr) },
     };
   }
 
 
 
-  // HTML sanitization & whitespace normalization
-  const rawHtml = normalizedDoc.cleanHtml || normalizedDoc.rawBody || sourceDetail.rawBody || "";
+  // HTML sanitization & whitespace normalization.
+  //
+  // The adapter contract (7.2) names the body `fullText` and the raw detail
+  // region `body`; the older `cleanText`/`cleanHtml`/`rawBody` names are kept as
+  // fallbacks for the local error path below. Reading only the old names left
+  // `cleanText` empty and hashed the title instead of the document, which is
+  // exactly the "classified from a snippet" defect 10.4 exists to prevent.
+  const rawHtml =
+    normalizedDoc.cleanHtml || sourceDetail.body || normalizedDoc.rawBody || sourceDetail.rawBody || "";
   const cleanHtml = sanitizeHtml(rawHtml);
-  const rawText = normalizedDoc.cleanText || stripAllHtml(cleanHtml);
+  const rawText = normalizedDoc.fullText || normalizedDoc.cleanText || stripAllHtml(cleanHtml);
   const cleanText = normalizeContentWhitespace(rawText);
 
   // Compute deterministic SHA-256 fingerprint
@@ -186,13 +202,22 @@ export async function processDetail({ sourceItemId, contentSourceId }) {
     });
   }
 
-  // Update SourceItem record and status
+  // Update SourceItem record and status.
+  //
+  // `rawMetadata` carries the adapter's `detailStatus` forward: the classify
+  // job reads it to decide whether the auto-draft lane is even open (10.4).
   await prisma.sourceItem.update({
     where: { id: sourceItem.id },
     data: {
       processingStatus: "VERSIONED",
       title: normalizedDoc.title || sourceItem.title,
-      summary: normalizedDoc.summary || sourceItem.summary,
+      summary: normalizedDoc.sourceSummary || normalizedDoc.summary || sourceItem.summary,
+      rawMetadata: {
+        ...(sourceItem.rawMetadata || {}),
+        ...(normalizedDoc.rawMetadata || {}),
+        detailStatus:
+          normalizedDoc.rawMetadata?.detailStatus || sourceDetail.detailStatus || "ENRICHED",
+      },
     },
   });
 

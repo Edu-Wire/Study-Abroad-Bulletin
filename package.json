@@ -25,7 +25,10 @@
     "worker": "node --import tsx backend/src/worker/index.js",
     "db:rollout": "node scripts/rollout.mjs",
     "db:rollout:apply": "node scripts/rollout.mjs --apply",
-    "verify:sources": "tsx backend/src/modules/ingestion/config/verifySources.ts"
+    "verify:sources": "tsx backend/src/modules/ingestion/config/verifySources.ts",
+    "verify:editorial": "tsx backend/src/modules/ingestion/validation/verifyEditorial.ts",
+    "verify:completeness": "tsx backend/src/modules/ingestion/validation/verifySourceCompleteness.ts",
+    "test:ingestion": "tsx --test \"backend/src/modules/ingestion/__tests__/*.test.ts\""
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

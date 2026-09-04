@@ -17,8 +17,14 @@ import {
   type EditorialCategory,
 } from "../schemas/aiAssessment.schema";
 
-/** CMS categories this pipeline is allowed to write. */
-export type CmsCategory = "VISA" | "SCHOLARSHIPS" | "ADMISSIONS" | "NEWS";
+/**
+ * CMS categories this pipeline is allowed to write.
+ *
+ * These are exactly the members of the Prisma `ArticleCategory` enum that
+ * ingestion may set. Naming a category the CMS does not have would fail at the
+ * database rather than at the mapping, which is the wrong place to find out.
+ */
+export type CmsCategory = "VISA" | "SCHOLARSHIPS" | "ADMISSIONS";
 
 const DIRECT_MAPPING: Partial<Record<EditorialCategory, CmsCategory>> = {
   STUDENT_VISA: "VISA",
@@ -26,12 +32,14 @@ const DIRECT_MAPPING: Partial<Record<EditorialCategory, CmsCategory>> = {
   POST_STUDY_WORK: "VISA",
   SCHOLARSHIP: "SCHOLARSHIPS",
   ADMISSIONS: "ADMISSIONS",
-  INTERNATIONAL_EDUCATION: "NEWS",
   // Deliberately absent, all mapping to null:
-  //   DATA_INTELLIGENCE - a dataset release is not an article
-  //   EU_POLICY         - institutional policy an editor must frame
-  //   OTHER             - by definition unplaceable
-  //   UNCLASSIFIED      - the whole point is that a human decides
+  //   INTERNATIONAL_EDUCATION - sector news with no CMS bucket that fits; the
+  //                             CMS UNIVERSITIES category is about institutions,
+  //                             not about mobility policy, so an editor files it
+  //   DATA_INTELLIGENCE       - a dataset release is not an article
+  //   EU_POLICY               - institutional policy an editor must frame
+  //   OTHER                   - by definition unplaceable
+  //   UNCLASSIFIED            - the whole point is that a human decides
 };
 
 export interface CategoryDecision {

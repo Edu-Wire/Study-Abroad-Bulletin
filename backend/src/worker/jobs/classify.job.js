@@ -1,15 +1,98 @@
 import { prisma } from "../../config/prisma.js";
-import { runPrefilter } from "../../modules/ingestion/ai/prefilter.rules.ts";
+import { assess } from "../../modules/ingestion/services/classification.service.ts";
+import { createOrUpdateCandidate } from "../../modules/ingestion/services/candidate.service.ts";
+import { createPrismaRepos } from "../../modules/ingestion/services/prismaRepos.ts";
 import { getSource } from "../../modules/ingestion/config/sourceRegistry.ts";
 import { enqueueJob, JobNames } from "../boss.js";
 
 /**
- * Worker job handler for AI assessment, relevance scoring, and candidate staging.
+ * Editorial routes that produce a candidate. IGNORE and HOLD keep the source
+ * evidence and the assessment, but never reach an editor's queue (10.3).
+ */
+const CANDIDATE_ROUTES = new Set(["REVIEW", "AUTO_DRAFT", "CRITICAL_DRAFT_ALERT"]);
+const DRAFT_ROUTES = new Set(["AUTO_DRAFT", "CRITICAL_DRAFT_ALERT"]);
+
+/**
+ * Structured logger bridging the worker's console to the adapter contract.
+ *
+ * @param {string} sourceCode
+ */
+function createJobLogger(sourceCode) {
+  const emit = (level, method) => (message, meta) =>
+    console[method](`[${sourceCode}:classify] ${level}: ${message}`, meta || "");
+  return {
+    debug: emit("debug", "debug"),
+    info: emit("info", "info"),
+    warn: emit("warn", "warn"),
+    error: emit("error", "error"),
+  };
+}
+
+/**
+ * Rebuild the normalized document (Blueprint 7.2) from what the detail stage
+ * persisted.
+ *
+ * The full stored text is the input, never the discovery summary: classifying a
+ * feed snippet is the root cause Blueprint 10.4 names, and the prefilter refuses
+ * an empty body rather than scoring a headline.
+ *
+ * @param {object} sourceItem
+ * @param {object|null} version
+ * @param {object} sourceConfig
+ */
+function buildNormalizedDocument(sourceItem, version, sourceConfig) {
+  const rawMetadata = sourceItem.rawMetadata || {};
+
+  return {
+    sourceId: sourceItem.contentSource.code,
+    externalId: sourceItem.externalId || sourceItem.canonicalUrl,
+    canonicalUrl: sourceItem.canonicalUrl,
+    countryCodes: sourceConfig.countryCodes || [],
+    publishedAt: sourceItem.publishedAt
+      ? sourceItem.publishedAt.toISOString()
+      : new Date(sourceItem.discoveredAt).toISOString(),
+    updatedAtSource: null,
+    documentType: rawMetadata.documentType || null,
+    title: version?.title || sourceItem.title,
+    sourceSummary: sourceItem.summary || null,
+    fullText: version?.cleanText || "",
+    sourceTopics: sourceItem.nativeTopics || [],
+    language: sourceItem.language || "en",
+    contentHash: version?.contentHash || "PENDING_PIPELINE_HASH",
+    rawMetadata,
+  };
+}
+
+/**
+ * `detailStatus` gates the auto-draft lane (10.4: no full source, no draft).
+ * The adapter records it in the item's raw metadata; a version with no text is
+ * treated as FAILED regardless of what the metadata claims.
+ *
+ * @param {object} sourceItem
+ * @param {object|null} version
+ */
+function resolveDetailStatus(sourceItem, version) {
+  if (!version?.cleanText || version.cleanText.trim().length === 0) return "FAILED";
+  const recorded = sourceItem.rawMetadata?.detailStatus;
+  return recorded === "ENRICHED" || recorded === "PARTIAL" || recorded === "FAILED"
+    ? recorded
+    : "ENRICHED";
+}
+
+/**
+ * Worker job handler for AI assessment, category invariants, routing and
+ * candidate staging.
+ *
+ * The editorial decision itself lives in Developer B's services — prefilter,
+ * provider, schema invariants (10.4), routing table (10.3), candidate bridge.
+ * This handler only loads state, calls them, and records the outcome, so the
+ * rules an editor sees in Admin are the rules that actually ran.
  *
  * @param {object} job
  * @param {object} job.data
  * @param {string} job.data.sourceItemId
  * @param {string} [job.data.versionId]
+ * @param {string} [job.data.triggeredBy]
  * @returns {Promise<object>}
  */
 export async function handleClassifyJob(job) {
@@ -29,6 +112,7 @@ export async function handleClassifyJob(job) {
         orderBy: { versionNumber: "desc" },
         take: 1,
       },
+      candidate: { select: { id: true } },
     },
   });
 
@@ -37,135 +121,110 @@ export async function handleClassifyJob(job) {
   }
 
   const contentSource = sourceItem.contentSource;
-  const version = sourceItem.versions[0] || null;
-  const sourceConfig =
-    getSource(contentSource.code) || contentSource.config;
+  const sourceConfig = getSource(contentSource.code) || contentSource.config;
 
   if (!sourceConfig) {
     throw new Error(`Source config for "${contentSource.code}" not found.`);
   }
 
-  // Build document representation for prefilter evaluation
-  const normalizedDoc = {
-    sourceId: contentSource.code,
-    sourceCode: contentSource.code,
-    externalId: sourceItem.externalId || undefined,
-    canonicalUrl: sourceItem.canonicalUrl,
-    url: sourceItem.canonicalUrl,
-    title: version?.title || sourceItem.title,
-    sourceSummary: sourceItem.summary || undefined,
-    sourceTopics: sourceItem.nativeTopics || [],
-    documentType: "NEWS_UPDATE",
-    publishedAt: sourceItem.publishedAt
-      ? sourceItem.publishedAt.toISOString()
-      : undefined,
-    capturedAt: version?.capturedAt
-      ? version.capturedAt.toISOString()
-      : new Date().toISOString(),
-    fullText: version?.cleanText || version?.cleanHtml || sourceItem.title,
-    authors: version?.authors || [],
-    language: sourceItem.language || "en",
-    countryCodes: sourceConfig.countryCodes || [],
-    contentHash: version?.contentHash || "PENDING_PIPELINE_HASH",
-    rawMetadata: {},
-  };
-
-  const prefilterVerdict = runPrefilter(sourceConfig, normalizedDoc);
-
-  // If rejected by prefilter, record assessment as IGNORED and exit
-  if (prefilterVerdict.verdict === "HARD_EXCLUDE") {
-    const assessment = await prisma.aiAssessment.create({
-      data: {
-        sourceItemId: sourceItem.id,
-        versionId: version?.id || null,
-        relevanceScore: (prefilterVerdict.score || 0) / 100,
-        confidenceScore: 0.9,
-        urgency: "LOW",
-        internalCategory: "OTHER",
-        suggestedCategory: "VISA",
-        routingDecision: "IGNORE",
-        suggestedHeadline: sourceItem.title,
-        suggestedSummary: prefilterVerdict.reason,
-        model: "prefilter-deterministic-v1",
-        promptVersion: "v1.0",
-        rawOutput: prefilterVerdict,
-      },
-    });
-
-    await prisma.sourceItem.update({
-      where: { id: sourceItem.id },
-      data: { processingStatus: "ROUTED" },
-    });
-
-    return {
-      status: "REJECTED_PREFILTER",
-      sourceItemId: sourceItem.id,
-      assessmentId: assessment.id,
-      reason: prefilterVerdict.reason,
-    };
-  }
-
-  // Passed prefilter -> Map category and route decision
-  const relevanceScore = Math.min(1.0, Math.max(0.65, (prefilterVerdict.score || 70) / 100));
-  const routingDecision = relevanceScore >= 0.8 ? "CREATE_DRAFT" : "REVIEW";
-  const suggestedCategory = contentSource.categoryHint || "VISA";
-
-  const assessment = await prisma.aiAssessment.create({
-    data: {
-      sourceItemId: sourceItem.id,
-      versionId: version?.id || null,
-      relevanceScore,
-      confidenceScore: 0.88,
-      urgency: sourceConfig.priority || "MEDIUM",
-      internalCategory: "STUDENT_VISA",
-      suggestedCategory,
-      routingDecision,
-      suggestedHeadline: version?.title || sourceItem.title,
-      suggestedSummary: sourceItem.summary || sourceItem.title,
-      suggestedContent: version?.cleanHtml || version?.cleanText || null,
-      model: "gemini-flash-1.5-assessment-v1",
-      promptVersion: "v1.0",
-      rawOutput: { prefilterVerdict, score: relevanceScore },
-    },
+  const version = sourceItem.versions[0] || null;
+  const logger = createJobLogger(contentSource.code);
+  const repos = createPrismaRepos({
+    versionId: version?.id ?? null,
+    actorId: payload.triggeredBy || "system:ingestion",
   });
 
-  // Create or update ArticleCandidate in editorial staging
-  const candidateStatus = routingDecision === "CREATE_DRAFT" ? "AUTO_DRAFTED" : "PENDING";
+  const document = buildNormalizedDocument(sourceItem, version, sourceConfig);
+  const detailStatus = resolveDetailStatus(sourceItem, version);
 
-  const candidate = await prisma.articleCandidate.upsert({
-    where: { sourceItemId: sourceItem.id },
-    create: {
-      sourceItemId: sourceItem.id,
-      aiAssessmentId: assessment.id,
-      headline: assessment.suggestedHeadline || sourceItem.title,
-      summary: assessment.suggestedSummary || sourceItem.summary || sourceItem.title,
-      content: version?.cleanHtml || version?.cleanText || null,
-      category: suggestedCategory,
-      primaryCountryId: sourceItem.countryId,
-      confidence: assessment.confidenceScore,
-      status: candidateStatus,
-    },
-    update: {
-      aiAssessmentId: assessment.id,
-      headline: assessment.suggestedHeadline || sourceItem.title,
-      summary: assessment.suggestedSummary || sourceItem.summary || sourceItem.title,
-      content: version?.cleanHtml || version?.cleanText || null,
-      category: suggestedCategory,
-      primaryCountryId: sourceItem.countryId,
-      confidence: assessment.confidenceScore,
-      status: candidateStatus,
-    },
+  await prisma.sourceItem.update({
+    where: { id: sourceItem.id },
+    data: { processingStatus: "SCORED" },
   });
+
+  // A provider outage or an invalid model payload throws a retryable error.
+  // It propagates so pg-boss re-queues: the source evidence is already stored
+  // and must not be marked processed because the model was unavailable (15.1).
+  const result = await assess({
+    source: sourceConfig,
+    sourceItem: {
+      id: sourceItem.id,
+      externalId: document.externalId,
+      canonicalUrl: sourceItem.canonicalUrl,
+    },
+    document,
+    detailStatus,
+    repos,
+    logger,
+  });
+
+  const route = result.routing.route;
 
   await prisma.sourceItem.update({
     where: { id: sourceItem.id },
     data: { processingStatus: "CLASSIFIED" },
   });
 
-  // Auto-draft to CMS if candidate is AUTO_DRAFTED
-  if (candidate.status === "AUTO_DRAFTED") {
+  if (!CANDIDATE_ROUTES.has(route)) {
+    // Evidence retained, no candidate. The assessment explains why on the
+    // item's Admin page, so an operator can see what the pipeline decided.
+    await prisma.sourceItem.update({
+      where: { id: sourceItem.id },
+      data: { processingStatus: "ROUTED" },
+    });
+
+    return {
+      status: "NO_CANDIDATE",
+      sourceItemId: sourceItem.id,
+      assessmentId: result.assessmentId,
+      route,
+      reason: result.routing.explanation,
+    };
+  }
+
+  // A material change on an item that already had a candidate is flagged rather
+  // than silently re-drafted (11.2).
+  const sourceChanged = version
+    ? Boolean(sourceItem.candidate) &&
+      (await prisma.sourceDiff.count({
+        where: { nextVersionId: version.id, isMaterial: true },
+      })) > 0
+    : false;
+
+  const candidate = await createOrUpdateCandidate({
+    source: sourceConfig,
+    sourceItem: {
+      id: sourceItem.id,
+      externalId: document.externalId,
+      canonicalUrl: sourceItem.canonicalUrl,
+    },
+    version: version ? { id: version.id, hash: version.contentHash } : undefined,
+    document,
+    assessment: result.assessment,
+    route,
+    repos,
+    logger,
+    actor: { id: payload.triggeredBy || "system:ingestion", kind: "SYSTEM" },
+    sourceChanged,
+  });
+
+  await prisma.articleCandidate.update({
+    where: { id: candidate.candidateId },
+    data: { aiAssessmentId: result.assessmentId },
+  });
+
+  await prisma.sourceItem.update({
+    where: { id: sourceItem.id },
+    data: { processingStatus: "ROUTED" },
+  });
+
+  // An auto-draftable route still needs a resolved CMS category. When the
+  // mapping refused one the candidate waits for an editor instead of drafting
+  // into a guessed category.
+  const autoDraft = DRAFT_ROUTES.has(route) && candidate.autoDraftable && !sourceChanged;
+  if (autoDraft) {
     await enqueueJob(JobNames.CANDIDATE_DRAFT, {
-      candidateId: candidate.id,
+      candidateId: candidate.candidateId,
       sourceItemId: sourceItem.id,
     });
   }
@@ -173,8 +232,12 @@ export async function handleClassifyJob(job) {
   return {
     status: "CLASSIFIED",
     sourceItemId: sourceItem.id,
-    assessmentId: assessment.id,
-    candidateId: candidate.id,
-    routingDecision,
+    assessmentId: result.assessmentId,
+    candidateId: candidate.candidateId,
+    route,
+    routeExplanation: result.routing.explanation,
+    category: candidate.draftPayload.category,
+    categoryReason: candidate.reason,
+    autoDraftQueued: autoDraft,
   };
 }
