@@ -218,7 +218,10 @@ export default function AdminSourcesPage() {
                 const health = HEALTH_STYLES[source.health];
 
                 return (
-                  <tr key={source.code} className="hover:bg-slate-50/70 transition-colors group">
+                  <tr
+                    key={source.code}
+                    className={`hover:bg-slate-50/70 transition-colors group ${!source.enabled ? "opacity-50" : ""}`}
+                  >
                     <td className="py-3.5 px-4">
                       <div className="flex items-start gap-2.5">
                         <span className="text-lg leading-none shrink-0" role="img" aria-label={GEO_META[source.geo].label}>
@@ -274,20 +277,27 @@ export default function AdminSourcesPage() {
                       )}
                     </td>
                     <td className="py-3.5 px-3 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${health.badge}`}
-                      >
-                        <span className={`h-1.5 w-1.5 rounded-full ${health.dot}`} />
-                        {HEALTH_LABELS[source.health]}
-                      </span>
+                      {source.enabled ? (
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${health.badge}`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${health.dot}`} />
+                          {HEALTH_LABELS[source.health]}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-slate-200 bg-slate-100 text-slate-500 text-[11px] font-semibold">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                          Disabled
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => void handleSync(source)}
-                          disabled={isSyncing}
-                          title="Trigger Sync"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:text-[#1769E0] hover:border-[#1769E0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={isSyncing || !source.enabled}
+                          title={source.enabled ? "Trigger Sync" : "This source is disabled"}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:text-[#1769E0] hover:border-[#1769E0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-slate-600 disabled:hover:border-slate-200"
                         >
                           <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
                           {isSyncing ? "Syncing" : "Sync"}

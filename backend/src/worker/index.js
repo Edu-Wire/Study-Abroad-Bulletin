@@ -24,42 +24,33 @@ export async function startWorker() {
 
   const boss = await startBoss();
 
-  // Subscribe job handlers
-  await boss.work(JobNames.SOURCE_DISCOVER, { batchSize: 5 }, async (jobs) => {
-    for (const job of jobs) {
-      await handleDiscoverJob(job);
+  // Subscribe job handlers.
+  //
+  // `batchSize` tells pg-boss how many jobs to fetch per poll — it does not
+  // make them run concurrently on its own. Awaiting each job in sequence
+  // inside a for-loop means one slow or hung job (a real government site
+  // that's just slow, a network stall) blocks every other job in that same
+  // batch, and pg-boss won't fetch the next batch until the callback returns
+  // — so a single stuck source can silently freeze that whole job type.
+  // Promise.allSettled runs the batch concurrently and never lets one job's
+  // rejection stop its siblings; each handler is responsible for recording
+  // its own failure (e.g. marking a SourceRun FAILED), so a settled-but-
+  // rejected entry here is already accounted for downstream.
+  const runBatch = (handler) => async (jobs) => {
+    const results = await Promise.allSettled(jobs.map((job) => handler(job)));
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error("[Worker] Job failed:", result.reason);
+      }
     }
-  });
+  };
 
-  await boss.work(JobNames.SOURCE_DETAIL, { batchSize: 10 }, async (jobs) => {
-    for (const job of jobs) {
-      await handleDetailJob(job);
-    }
-  });
-
-  await boss.work(JobNames.SOURCE_CLASSIFY, { batchSize: 5 }, async (jobs) => {
-    for (const job of jobs) {
-      await handleClassifyJob(job);
-    }
-  });
-
-  await boss.work(JobNames.CANDIDATE_DRAFT, { batchSize: 5 }, async (jobs) => {
-    for (const job of jobs) {
-      await handleDraftJob(job);
-    }
-  });
-
-  await boss.work(JobNames.BACKFILL_WINDOW, { batchSize: 2 }, async (jobs) => {
-    for (const job of jobs) {
-      await handleBackfillJob(job);
-    }
-  });
-
-  await boss.work(JobNames.SOURCE_RECONCILE, { batchSize: 2 }, async (jobs) => {
-    for (const job of jobs) {
-      await handleReconcileJob(job);
-    }
-  });
+  await boss.work(JobNames.SOURCE_DISCOVER, { batchSize: 5 }, runBatch(handleDiscoverJob));
+  await boss.work(JobNames.SOURCE_DETAIL, { batchSize: 10 }, runBatch(handleDetailJob));
+  await boss.work(JobNames.SOURCE_CLASSIFY, { batchSize: 5 }, runBatch(handleClassifyJob));
+  await boss.work(JobNames.CANDIDATE_DRAFT, { batchSize: 5 }, runBatch(handleDraftJob));
+  await boss.work(JobNames.BACKFILL_WINDOW, { batchSize: 2 }, runBatch(handleBackfillJob));
+  await boss.work(JobNames.SOURCE_RECONCILE, { batchSize: 2 }, runBatch(handleReconcileJob));
 
   console.log("🚀 [Worker] Ingestion worker successfully subscribed to all 6 job queues:");
   console.log(`   - ${JobNames.SOURCE_DISCOVER}`);

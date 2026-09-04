@@ -120,6 +120,13 @@ router.post("/content-sources/:id/sync", requireAdmin, async (req, res) => {
       return res.status(404).json({ success: false, message: "Content source not found." });
     }
 
+    if (!source.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: `Source "${source.name}" is disabled and cannot be synced.`,
+      });
+    }
+
     // Create operational run record
     const run = await prisma.sourceRun.create({
       data: {
@@ -179,6 +186,12 @@ router.post("/content-sources/:id/reconcile", requireAdmin, async (req, res) => 
     if (!source) {
       return res.status(404).json({ success: false, message: "Content source not found." });
     }
+    if (!source.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: `Source "${source.name}" is disabled and cannot be reconciled.`,
+      });
+    }
 
     const jobId = await enqueueJob(JobNames.SOURCE_RECONCILE, {
       contentSourceId: source.id,
@@ -210,6 +223,12 @@ router.post("/content-sources/:id/backfill", requireAdmin, async (req, res) => {
     const resolvedSource = await prisma.contentSource.findFirst({ where: { OR: [{ id }, { code: id }] } });
     if (!resolvedSource) {
       return res.status(404).json({ success: false, message: "Content source not found." });
+    }
+    if (!resolvedSource.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: `Source "${resolvedSource.name}" is disabled and cannot be backfilled.`,
+      });
     }
     const resolvedId = resolvedSource.id;
 
