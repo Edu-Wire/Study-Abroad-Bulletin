@@ -201,6 +201,7 @@ export default function AdminSourcesPage() {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50/75 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                <th className="py-3 px-4 w-16 whitespace-nowrap">S.No.</th>
                 <th className="py-3 px-4">Source</th>
                 <th className="py-3 px-3">Method</th>
                 <th className="py-3 px-3">Cadence</th>
@@ -212,12 +213,15 @@ export default function AdminSourcesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {visibleSources.map((source) => {
+              {visibleSources.map((source, index) => {
                 const isSyncing = Boolean(syncing[source.code]);
                 const health = HEALTH_STYLES[source.health];
 
                 return (
                   <tr key={source.code} className="hover:bg-slate-50/70 transition-colors group">
+                    <td className="py-3.5 px-4 whitespace-nowrap text-slate-400 font-mono text-xs font-medium">
+                      {index + 1}
+                    </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-start gap-2.5">
                         <span className="text-lg leading-none shrink-0" role="img" aria-label={GEO_META[source.geo].label}>
