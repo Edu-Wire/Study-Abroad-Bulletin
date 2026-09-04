@@ -1,5 +1,5 @@
 import { prisma } from "../../config/prisma.js";
-import { runPrefilter } from "../../modules/ingestion/classification/prefilterRules.ts";
+import { runPrefilter } from "../../modules/ingestion/ai/prefilter.rules.ts";
 import { getSource } from "../../modules/ingestion/config/sourceRegistry.ts";
 import { enqueueJob, JobNames } from "../boss.js";
 
@@ -50,6 +50,7 @@ export async function handleClassifyJob(job) {
     sourceId: contentSource.code,
     sourceCode: contentSource.code,
     externalId: sourceItem.externalId || undefined,
+    canonicalUrl: sourceItem.canonicalUrl,
     url: sourceItem.canonicalUrl,
     title: version?.title || sourceItem.title,
     sourceSummary: sourceItem.summary || undefined,
@@ -63,17 +64,21 @@ export async function handleClassifyJob(job) {
       : new Date().toISOString(),
     fullText: version?.cleanText || version?.cleanHtml || sourceItem.title,
     authors: version?.authors || [],
+    language: sourceItem.language || "en",
+    countryCodes: sourceConfig.countryCodes || [],
+    contentHash: version?.contentHash || "PENDING_PIPELINE_HASH",
+    rawMetadata: {},
   };
 
   const prefilterVerdict = runPrefilter(sourceConfig, normalizedDoc);
 
   // If rejected by prefilter, record assessment as IGNORED and exit
-  if (!prefilterVerdict.passed) {
+  if (prefilterVerdict.verdict === "HARD_EXCLUDE") {
     const assessment = await prisma.aiAssessment.create({
       data: {
         sourceItemId: sourceItem.id,
         versionId: version?.id || null,
-        relevanceScore: prefilterVerdict.signal / 100,
+        relevanceScore: (prefilterVerdict.score || 0) / 100,
         confidenceScore: 0.9,
         urgency: "LOW",
         internalCategory: "OTHER",
@@ -101,7 +106,7 @@ export async function handleClassifyJob(job) {
   }
 
   // Passed prefilter -> Map category and route decision
-  const relevanceScore = Math.min(1.0, Math.max(0.65, prefilterVerdict.signal / 100));
+  const relevanceScore = Math.min(1.0, Math.max(0.65, (prefilterVerdict.score || 70) / 100));
   const routingDecision = relevanceScore >= 0.8 ? "CREATE_DRAFT" : "REVIEW";
   const suggestedCategory = contentSource.categoryHint || "VISA";
 

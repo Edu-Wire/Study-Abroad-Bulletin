@@ -65,6 +65,15 @@ export async function handleDraftJob(job) {
     });
   }
 
+  const sourceUrl = sourceItem?.canonicalUrl || `https://source.local/${payload.candidateId}`;
+
+  if (!article) {
+    // Check if an article with this sourceUrl already exists
+    article = await prisma.article.findFirst({
+      where: { sourceUrl },
+    });
+  }
+
   if (!article) {
     // Generate unique slug
     const slug = slugify(candidate.headline);
@@ -79,7 +88,7 @@ export async function handleDraftJob(job) {
         category: candidate.category || "VISA",
         status: "DRAFT",
         primaryCountryId: candidate.primaryCountryId || sourceItem?.countryId,
-        sourceUrl: sourceItem?.canonicalUrl || `https://source.local/${slug}`,
+        sourceUrl,
         sourceName: sourceItem?.contentSource?.name || "Official Source",
         publishedAt: sourceItem?.publishedAt || new Date(),
         isRss: false,
@@ -87,6 +96,14 @@ export async function handleDraftJob(job) {
     });
 
     // Update candidate with articleId and status
+    await prisma.articleCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        articleId: article.id,
+        status: "DRAFT_CREATED",
+      },
+    });
+  } else if (!candidate.articleId) {
     await prisma.articleCandidate.update({
       where: { id: candidate.id },
       data: {

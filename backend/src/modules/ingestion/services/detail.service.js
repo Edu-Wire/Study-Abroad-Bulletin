@@ -5,6 +5,7 @@ import { getSource } from "../config/sourceRegistry.ts";
 import { hashContent, normalizeContentWhitespace } from "../utils/contentHasher.js";
 import { sanitizeHtml, stripAllHtml } from "../utils/htmlSanitizer.js";
 import { createHttpFetcher } from "../utils/httpClient.js";
+import { parseSafeXml } from "../utils/safeXmlParser.js";
 
 /**
  * Processes detail fetching, normalization, content hashing, versioning, and diffing for a SourceItem.
@@ -44,38 +45,45 @@ export async function processDetail({ sourceItemId, contentSourceId }) {
   const adapter = createAdapter(sourceConfig);
 
   const discoveredItem = {
+    sourceId: contentSource.code,
     externalId: sourceItem.externalId || undefined,
+    canonicalUrl: sourceItem.canonicalUrl,
     url: sourceItem.canonicalUrl,
     title: sourceItem.title,
+    sourceSummary: sourceItem.summary || undefined,
     summary: sourceItem.summary || undefined,
     publishedAt: sourceItem.publishedAt
       ? sourceItem.publishedAt.toISOString()
       : undefined,
     language: sourceItem.language || "en",
+    documentType: "NEWS_RELEASE",
+    sourceTopics: sourceItem.nativeTopics || [],
     nativeTopics: sourceItem.nativeTopics || [],
+    discoveryRaw: sourceItem.rawMetadata || {},
     rawMetadata: sourceItem.rawMetadata || {},
   };
 
   const defaultLogger = {
-    debug: () => {},
-    info: () => {},
-    warn: () => {},
-    error: () => {},
+    debug: (msg, meta) => console.debug(`[${sourceConfig.code}:detail] ${msg}`, meta || ""),
+    info: (msg, meta) => console.info(`[${sourceConfig.code}:detail] ${msg}`, meta || ""),
+    warn: (msg, meta) => console.warn(`[${sourceConfig.code}:detail] ${msg}`, meta || ""),
+    error: (msg, meta) => console.error(`[${sourceConfig.code}:detail] ${msg}`, meta || ""),
+  };
+
+  const adapterContext = {
+    source: sourceConfig,
+    http,
+    xml: { parse: (xml) => parseSafeXml(xml) },
+    logger: defaultLogger,
+    now: () => new Date(),
   };
 
   let sourceDetail;
   let normalizedDoc;
 
   try {
-    sourceDetail = await adapter.fetchDetail(discoveredItem, {
-      http,
-      source: sourceConfig,
-      logger: defaultLogger,
-    });
-    normalizedDoc = await adapter.normalize(sourceDetail, discoveredItem, {
-      source: sourceConfig,
-      logger: defaultLogger,
-    });
+    sourceDetail = await adapter.fetchDetail(discoveredItem, adapterContext);
+    normalizedDoc = await adapter.normalize(sourceDetail, discoveredItem, adapterContext);
   } catch (adapterErr) {
     sourceDetail = {
       url: discoveredItem.url,

@@ -3,6 +3,7 @@ import { enqueueJob, JobNames } from "../../../worker/boss.js";
 import { createAdapter } from "../adapters/index.ts";
 import { getSource } from "../config/sourceRegistry.ts";
 import { createHttpFetcher } from "../utils/httpClient.js";
+import { parseSafeXml } from "../utils/safeXmlParser.js";
 import { canonicalizeUrl, hashCanonicalUrl } from "../utils/urlCanonicalizer.js";
 
 /**
@@ -70,20 +71,27 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
     const discoverContext = {
       source: sourceConfig,
       http,
+      xml: { parse: (xml) => parseSafeXml(xml) },
+      logger: {
+        debug: (msg, meta) => console.debug(`[${sourceConfig.code}] ${msg}`, meta || ""),
+        info: (msg, meta) => console.info(`[${sourceConfig.code}] ${msg}`, meta || ""),
+        warn: (msg, meta) => console.warn(`[${sourceConfig.code}] ${msg}`, meta || ""),
+        error: (msg, meta) => console.error(`[${sourceConfig.code}] ${msg}`, meta || ""),
+      },
+      now: () => new Date(),
+      syncState: {
+        watermarkAt: syncState?.watermark ? syncState.watermark.toISOString() : undefined,
+        cursor: syncState?.cursor || undefined,
+        etag: syncState?.etag || undefined,
+        lastModified: syncState?.lastModified || undefined,
+      },
       cursor: syncState?.cursor || undefined,
       sinceWatermark: syncState?.watermark
         ? syncState.watermark.toISOString()
         : undefined,
       etag: syncState?.etag || undefined,
       lastModified: syncState?.lastModified || undefined,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
     };
-
 
     const discoveryPage = await adapter.discover(discoverContext);
     const discoveredItems = discoveryPage?.items || [];
@@ -91,14 +99,17 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
 
     for (const item of discoveredItems) {
       try {
-        if (!item.url || !item.title) {
+        const itemUrl = item.canonicalUrl || item.url;
+        if (!itemUrl || !item.title) {
           continue;
         }
 
-        const canonicalUrl = canonicalizeUrl(item.url);
+        const canonicalUrl = canonicalizeUrl(itemUrl);
         const canonicalUrlHash = hashCanonicalUrl(canonicalUrl);
         const externalId = item.externalId ? String(item.externalId).trim() : null;
         const publishedAt = item.publishedAt ? new Date(item.publishedAt) : null;
+        const summary = item.sourceSummary || item.summary || null;
+        const nativeTopics = item.sourceTopics || item.nativeTopics || [];
 
         let sourceItem = null;
 
@@ -120,11 +131,11 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
                 canonicalUrl,
                 canonicalUrlHash,
                 title: item.title,
-                summary: item.summary || existing.summary,
+                summary: summary || existing.summary,
                 publishedAt: publishedAt || existing.publishedAt,
                 language: item.language || existing.language || "en",
-                nativeTopics: item.nativeTopics || existing.nativeTopics,
-                rawMetadata: item.rawMetadata || item,
+                nativeTopics: nativeTopics.length > 0 ? nativeTopics : existing.nativeTopics,
+                rawMetadata: item.discoveryRaw || item.rawMetadata || item,
               },
             });
             itemsUpdated++;
@@ -136,12 +147,12 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
                 canonicalUrl,
                 canonicalUrlHash,
                 title: item.title,
-                summary: item.summary || null,
+                summary,
                 publishedAt,
                 countryId: contentSource.countryId,
                 language: item.language || "en",
-                nativeTopics: item.nativeTopics || [],
-                rawMetadata: item.rawMetadata || item,
+                nativeTopics,
+                rawMetadata: item.discoveryRaw || item.rawMetadata || item,
                 processingStatus: "DETAIL_PENDING",
               },
             });
@@ -163,11 +174,11 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
               where: { id: existing.id },
               data: {
                 title: item.title,
-                summary: item.summary || existing.summary,
+                summary: summary || existing.summary,
                 publishedAt: publishedAt || existing.publishedAt,
                 language: item.language || existing.language || "en",
-                nativeTopics: item.nativeTopics || existing.nativeTopics,
-                rawMetadata: item.rawMetadata || item,
+                nativeTopics: nativeTopics.length > 0 ? nativeTopics : existing.nativeTopics,
+                rawMetadata: item.discoveryRaw || item.rawMetadata || item,
               },
             });
             itemsUpdated++;
@@ -179,12 +190,12 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
                 canonicalUrl,
                 canonicalUrlHash,
                 title: item.title,
-                summary: item.summary || null,
+                summary,
                 publishedAt,
                 countryId: contentSource.countryId,
                 language: item.language || "en",
-                nativeTopics: item.nativeTopics || [],
-                rawMetadata: item.rawMetadata || item,
+                nativeTopics,
+                rawMetadata: item.discoveryRaw || item.rawMetadata || item,
                 processingStatus: "DETAIL_PENDING",
               },
             });
