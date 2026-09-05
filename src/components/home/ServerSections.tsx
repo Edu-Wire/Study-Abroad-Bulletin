@@ -4,10 +4,9 @@ import { ArrowRight } from "lucide-react";
 import {
   images,
   countries,
-  guides,
   deadlines,
 } from "@/data/mock";
-import type { NewsArticle, Scholarship, VisaUpdate } from "@/data/mock";
+import type { Guide, NewsArticle, Scholarship, VisaUpdate } from "@/data/mock";
 import { SectionHeading } from "@/components/common/SectionHeading";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import {
@@ -589,7 +588,11 @@ export function VisaUpdatesSection({ visaUpdates }: VisaUpdatesSectionProps) {
 
 // ─── GUIDES SECTION ───────────────────────────────────────────────────────────
 
-export function GuidesSection() {
+interface GuidesSectionProps {
+  guides: Guide[];
+}
+
+export function GuidesSection({ guides }: GuidesSectionProps) {
   const [featured, ...supporting] = guides;
 
   return (

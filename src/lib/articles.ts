@@ -20,7 +20,7 @@
  */
 
 import prisma from "@/lib/prisma";
-import type { NewsArticle, NewsCategory, VisaUpdate } from "@/data/mock";
+import type { Guide, NewsArticle, NewsCategory, VisaUpdate } from "@/data/mock";
 
 // ---------------------------------------------------------------------------
 // Category mapping: Prisma enum → frontend display string
@@ -290,6 +290,59 @@ export async function getPublishedVisaUpdates(limit?: number): Promise<VisaUpdat
   }
 }
 
+/**
+ * Returns PUBLISHED articles in the GUIDES category, mapped to the Guide
+ * shape used by the /guides listing page and the homepage GuidesSection.
+ *
+ * All guides share one `category` label ("Guides") — Article has no
+ * sub-category column (SOP/IELTS/etc. from the old mock data), so the
+ * listing page's per-topic grouping is dropped in favour of one flat list.
+ */
+export async function getPublishedGuides(limit?: number): Promise<Guide[]> {
+  try {
+    const rows = await prisma.article.findMany({
+      where: { status: "PUBLISHED", category: "GUIDES" },
+      orderBy: { publishedAt: "desc" },
+      ...(limit ? { take: limit } : {}),
+    });
+
+    return rows.map((a) => ({
+      id: a.slug,
+      category: "Guides",
+      title: a.headline,
+      description: a.summary,
+      readingTime: a.readingTime,
+    }));
+  } catch (error) {
+    console.error("[articles.ts] ❌ Failed to fetch guides from PostgreSQL:", error);
+    return [];
+  }
+}
+
+export interface GuideDetail extends Guide {
+  content: string | null;
+}
+
+export async function getGuideBySlug(slug: string): Promise<GuideDetail | null> {
+  try {
+    const row = await prisma.article.findFirst({
+      where: { slug, status: "PUBLISHED", category: "GUIDES" },
+    });
+    if (!row) return null;
+
+    return {
+      id: row.slug,
+      category: "Guides",
+      title: row.headline,
+      description: row.summary,
+      readingTime: row.readingTime,
+      content: row.content,
+    };
+  } catch (error) {
+    console.error(`[articles.ts] ❌ Failed to fetch guide "${slug}" from PostgreSQL:`, error);
+    return null;
+  }
+}
 // ---------------------------------------------------------------------------
 // Admin preview fetcher — returns any status article with full raw fields
 // ---------------------------------------------------------------------------
