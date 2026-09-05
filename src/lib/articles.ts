@@ -20,7 +20,7 @@
  */
 
 import prisma from "@/lib/prisma";
-import type { NewsArticle, NewsCategory } from "@/data/mock";
+import type { NewsArticle, NewsCategory, VisaUpdate } from "@/data/mock";
 
 // ---------------------------------------------------------------------------
 // Category mapping: Prisma enum → frontend display string
@@ -255,6 +255,38 @@ export async function getArticleBySlug(slug: string): Promise<NewsArticle | null
       error
     );
     return null;
+  }
+}
+
+/**
+ * Returns PUBLISHED articles in the VISA category, mapped to the VisaUpdate
+ * shape used by the /visa page and the homepage VisaUpdatesSection.
+ *
+ * `visaType` has no dedicated column on Article — every row is labelled with
+ * a generic caption. `urgent` reuses the existing `breaking` flag rather than
+ * adding a new schema field for what is functionally the same concept.
+ */
+export async function getPublishedVisaUpdates(limit?: number): Promise<VisaUpdate[]> {
+  try {
+    const rows = await prisma.article.findMany({
+      where: { status: "PUBLISHED", category: "VISA" },
+      include: { primaryCountry: true },
+      orderBy: { publishedAt: "desc" },
+      ...(limit ? { take: limit } : {}),
+    });
+
+    return rows.map((a) => ({
+      id: a.slug,
+      country: a.primaryCountry?.name ?? "Global",
+      flag: a.primaryCountry?.flag ?? "🌐",
+      visaType: "Visa & Immigration Update",
+      headline: a.headline,
+      date: formatPublishedDate(a.publishedAt),
+      urgent: a.breaking,
+    }));
+  } catch (error) {
+    console.error("[articles.ts] ❌ Failed to fetch visa updates from PostgreSQL:", error);
+    return [];
   }
 }
 

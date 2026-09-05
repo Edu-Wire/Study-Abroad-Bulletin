@@ -6,7 +6,9 @@ import { SectionHeading } from "@/components/common/SectionHeading";
 import { VisaUpdateCard } from "@/components/cards/MiscCards";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner, AdSidebar } from "@/components/editorial/AdComponents";
-import { visaUpdates } from "@/data/mock";
+import { getPublishedVisaUpdates } from "@/lib/articles";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Visa Updates — Student Visa Changes & Immigration Policy",
@@ -14,7 +16,8 @@ export const metadata: Metadata = {
     "Stay current with student visa changes and immigration policy updates for Canada, UK, Australia, Germany and more.",
 };
 
-export default function VisaPage() {
+export default async function VisaPage() {
+  const visaUpdates = await getPublishedVisaUpdates();
   const urgent = visaUpdates.filter((v) => v.urgent);
   const regular = visaUpdates.filter((v) => !v.urgent);
 

@@ -4,11 +4,10 @@ import { ArrowRight } from "lucide-react";
 import {
   images,
   countries,
-  visaUpdates,
   guides,
   deadlines,
 } from "@/data/mock";
-import type { NewsArticle, Scholarship } from "@/data/mock";
+import type { NewsArticle, Scholarship, VisaUpdate } from "@/data/mock";
 import { SectionHeading } from "@/components/common/SectionHeading";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import {
@@ -510,7 +509,11 @@ export function ScholarshipSpotlight({ scholarships }: ScholarshipSpotlightProps
 
 // ─── VISA UPDATES ─────────────────────────────────────────────────────────────
 
-export function VisaUpdatesSection() {
+interface VisaUpdatesSectionProps {
+  visaUpdates: VisaUpdate[];
+}
+
+export function VisaUpdatesSection({ visaUpdates }: VisaUpdatesSectionProps) {
   return (
     <section className="border-b border-border bg-background">
       <div className="shell py-7 lg:py-12 min-w-0">

@@ -18,7 +18,7 @@ import {
 import { LatestNews } from "@/components/home/LatestNews";
 import { FindYourUniversity } from "@/components/home/FindYourUniversity";
 import { AdBanner } from "@/components/editorial/AdComponents";
-import { getAllNews, getBreakingArticle } from "@/lib/articles";
+import { getAllNews, getBreakingArticle, getPublishedVisaUpdates } from "@/lib/articles";
 import { getUniversities, toFrontendUniversity } from "@/lib/server/universities";
 import { getScholarships, toFrontendScholarship } from "@/lib/server/scholarships";
 
@@ -46,11 +46,12 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   // Fetch once at the page level; pass as props to server components below.
-  const [articles, breakingArticle, apiUniversities, apiScholarships] = await Promise.all([
+  const [articles, breakingArticle, apiUniversities, apiScholarships, visaUpdates] = await Promise.all([
     getAllNews(),
     getBreakingArticle(),
     getUniversities(),
     getScholarships(),
+    getPublishedVisaUpdates(),
   ]);
   const universities = apiUniversities.map(toFrontendUniversity);
   const scholarships = apiScholarships.map(toFrontendScholarship);
@@ -102,7 +103,7 @@ export default async function HomePage() {
         <ScholarshipSpotlight scholarships={scholarships} />
 
         {/* Visa updates */}
-        <VisaUpdatesSection />
+        <VisaUpdatesSection visaUpdates={visaUpdates} />
 
         {/* Immigration Tracker Feature Section */}
         <ImmigrationTrackerSpotlight />
