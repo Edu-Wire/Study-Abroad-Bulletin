@@ -18,6 +18,9 @@ import {
   Rss,
   History,
   GitCompare,
+  ListTree,
+  Activity,
+  HeartPulse,
   ExternalLink,
   X,
   ShieldCheck,
@@ -84,9 +87,27 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["SUPER_ADMIN", "ADMIN", "EDITOR"],
       },
       {
+        label: "Source Items",
+        href: "/admin/source-items",
+        icon: ListTree,
+        roles: ["SUPER_ADMIN", "ADMIN", "EDITOR"],
+      },
+      {
         label: "Source Changes",
         href: "/admin/source-changes",
         icon: History,
+        roles: ["SUPER_ADMIN", "ADMIN", "EDITOR"],
+      },
+      {
+        label: "Source Runs",
+        href: "/admin/source-runs",
+        icon: Activity,
+        roles: ["SUPER_ADMIN", "ADMIN", "EDITOR"],
+      },
+      {
+        label: "Source Health",
+        href: "/admin/source-health",
+        icon: HeartPulse,
         roles: ["SUPER_ADMIN", "ADMIN", "EDITOR"],
       },
       {

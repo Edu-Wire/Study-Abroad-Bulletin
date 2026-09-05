@@ -20,6 +20,7 @@ import {
   enforceCategoryInvariants,
   type AiAssessmentOutput,
 } from "../schemas/aiAssessment.schema";
+import { mapToCmsCategory } from "../config/categoryMapping";
 import type { SourceConfig } from "../config/sourceConfig.schema";
 import type { NormalizedSourceDocument } from "../schemas/candidate.schema";
 import type { AdapterLogger, DetailStatus, IngestionRepos } from "../adapters/base/types";
@@ -120,10 +121,20 @@ export async function assess(input: AssessInput): Promise<AssessResult> {
     },
   });
 
+  // Resolved here rather than at persistence time so the stored assessment
+  // carries the CMS category decision — including the null that means "no
+  // honest equivalent, an editor chooses" — alongside the scores that produced it.
+  const categoryDecision = mapToCmsCategory(assessment);
+
   const stored = await input.repos.aiAssessment.create({
     sourceItemId: input.sourceItem.id,
     sourceCode: source.code,
     ...assessment,
+    cmsCategory: categoryDecision.category,
+    cmsCategoryReason: categoryDecision.reason,
+    autoDraftable: categoryDecision.autoDraftable,
+    suggestedHeadline: document.title,
+    suggestedContent: document.fullText,
     // Recorded so a misclassification found months later is reproducible (10.4).
     modelKey: providerResult.modelKey,
     promptVersion: providerResult.promptVersion,

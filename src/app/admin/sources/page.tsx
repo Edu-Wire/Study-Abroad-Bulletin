@@ -14,9 +14,9 @@
  * says so rather than showing invented health figures.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Rss, RefreshCw, Settings2, ListTree } from "lucide-react";
+import { Rss, RefreshCw, Settings2, ListTree, Database, HeartPulse } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer, AdminEmptyState } from "@/components/admin/AdminTable";
 import {
@@ -35,6 +35,7 @@ import {
   type SourceGeo,
   type TransportBadge,
 } from "@/lib/content-sources";
+import { seedSources } from "@/lib/ingestion-api";
 
 type GeoFilter = SourceGeo | "ALL";
 
@@ -74,25 +75,34 @@ export default function AdminSourcesPage() {
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const [seeding, setSeeding] = useState(false);
 
-    getContentSources()
-      .then((result) => {
-        if (cancelled) return;
-        setSources(result.data);
-        setOrigin(result.origin);
-        setOriginNotice(result.notice ?? null);
-      })
-      .catch(() => {
-        // fetchWithFallback already degrades; this only catches a programming
-        // error, and the catalog is already on screen.
-      });
-
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    const result = await getContentSources();
+    setSources(result.data);
+    setOrigin(result.origin);
+    setOriginNotice(result.notice ?? null);
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- `load` fetches, then sets state; the rule targets synchronous state sync, and an effect is where a client-rendered admin screen is meant to start a fetch.
+    void load();
+  }, [load]);
+
+  /**
+   * Copy the 28 registry sources into the database.
+   *
+   * Needed once per environment before anything can sync: the registry is the
+   * source of truth for configuration, but runs, items and sync state hang off
+   * a `ContentSource` row. Re-running it updates rather than duplicating.
+   */
+  const handleSeed = async () => {
+    setSeeding(true);
+    const result = await seedSources();
+    setNotice(result.notice);
+    setSeeding(false);
+    if (result.accepted) await load();
+  };
 
   const counts = useMemo(() => getSourceCountsByGeo(sources), [sources]);
 
@@ -131,7 +141,24 @@ export default function AdminSourcesPage() {
         description="Official government and institutional sources feeding the ingestion engine: APIs, feeds, web listings, rule-page change watches and scheduled datasets across all Phase 1 destinations."
         count={sources.length}
         countLabel="sources"
-      />
+      >
+        <Link
+          href="/admin/source-health"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          <HeartPulse className="h-3.5 w-3.5 text-slate-500" />
+          Health
+        </Link>
+        <button
+          onClick={() => void handleSeed()}
+          disabled={seeding}
+          title="Copy the 28 registry sources into the database. Safe to re-run."
+          className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Database className={`h-3.5 w-3.5 text-slate-500 ${seeding ? "animate-pulse" : ""}`} />
+          {seeding ? "Seeding…" : "Seed registry"}
+        </button>
+      </AdminPageHeader>
 
       {origin === "FALLBACK" && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
@@ -218,21 +245,19 @@ export default function AdminSourcesPage() {
                 const health = HEALTH_STYLES[source.health];
 
                 return (
-                  <tr
-                    key={source.code}
-                    className={`hover:bg-slate-50/70 transition-colors group ${!source.enabled ? "opacity-50" : ""}`}
-                  >
+                  <tr key={source.code} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="py-3.5 px-4">
                       <div className="flex items-start gap-2.5">
                         <span className="text-lg leading-none shrink-0" role="img" aria-label={GEO_META[source.geo].label}>
                           {GEO_META[source.geo].flag}
                         </span>
                         <div className="min-w-0">
-                          <div
-                            className={`font-bold text-xs sm:text-sm group-hover:text-[#1769E0] transition-colors ${PRIORITY_STYLES[source.priority]}`}
+                          <Link
+                            href={`/admin/sources/${encodeURIComponent(source.code)}`}
+                            className={`block font-bold text-xs sm:text-sm group-hover:text-[#1769E0] transition-colors ${PRIORITY_STYLES[source.priority]}`}
                           >
                             {source.name}
-                          </div>
+                          </Link>
                           <div className="text-[11px] text-slate-400 font-mono truncate">
                             {source.code}
                           </div>
@@ -277,41 +302,34 @@ export default function AdminSourcesPage() {
                       )}
                     </td>
                     <td className="py-3.5 px-3 whitespace-nowrap">
-                      {source.enabled ? (
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${health.badge}`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${health.dot}`} />
-                          {HEALTH_LABELS[source.health]}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-slate-200 bg-slate-100 text-slate-500 text-[11px] font-semibold">
-                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                          Disabled
-                        </span>
-                      )}
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${health.badge}`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${health.dot}`} />
+                        {HEALTH_LABELS[source.health]}
+                      </span>
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => void handleSync(source)}
-                          disabled={isSyncing || !source.enabled}
-                          title={source.enabled ? "Trigger Sync" : "This source is disabled"}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:text-[#1769E0] hover:border-[#1769E0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-slate-600 disabled:hover:border-slate-200"
+                          disabled={isSyncing}
+                          title="Trigger Sync"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:text-[#1769E0] hover:border-[#1769E0] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
                           {isSyncing ? "Syncing" : "Sync"}
                         </button>
                         <Link
-                          href={`/admin/source-items?sourceId=${source.code}`}
-                          title="View Items"
+                          href={`/admin/source-items?source=${encodeURIComponent(source.code)}`}
+                          title="Inspect items from this source"
                           className="p-1.5 rounded-lg text-slate-400 hover:text-[#1769E0] hover:bg-blue-50 transition-colors"
                         >
                           <ListTree className="h-4 w-4" />
                         </Link>
                         <Link
-                          href={`/admin/sources/${source.code}`}
-                          title="Source Detail"
+                          href={`/admin/sources/${encodeURIComponent(source.code)}`}
+                          title="Operations: sync state, cursor, runs, backfill and healthcheck"
                           className="p-1.5 rounded-lg text-slate-400 hover:text-[#1769E0] hover:bg-blue-50 transition-colors"
                         >
                           <Settings2 className="h-4 w-4" />

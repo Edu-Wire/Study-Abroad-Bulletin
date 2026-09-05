@@ -49,6 +49,7 @@ import {
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
 import ingestionRoutes from "./modules/ingestion/ingestion.routes.js";
 import { canonicalizeUrl } from "./modules/ingestion/utils/urlCanonicalizer.js";
+import editorialRoutes from "./modules/ingestion/editorial.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -83,7 +84,12 @@ app.use(requireBffSecret);
 // stricter; this catches everything else, including read-heavy scraping.
 app.use("/api", generalApiLimiter);
 
-// Ingestion Engine Admin API Routes
+// Ingestion Engine Admin API Routes.
+//
+// The editorial router is mounted first: it owns ignore, source changes and
+// source health, and it validates the editorial preconditions on create-draft
+// before delegating to the operational router that enqueues the job.
+app.use("/api/admin", editorialRoutes);
 app.use("/api/admin", ingestionRoutes);
 
 // Cookie configuration for opaque session tokens.
@@ -128,71 +134,71 @@ app.post(
   authLimiter,
   validateRequest({ body: SignupSchema }),
   async (req, res) => {
-  try {
-    const { firstName, lastName, email, password } = res.locals.validated.body;
+    try {
+      const { firstName, lastName, email, password } = res.locals.validated.body;
 
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({
+      if (!firstName || !lastName || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide first name, last name, email, and password.",
+        });
+      }
+
+      // Password strength is enforced by StrongPasswordSchema in the validator.
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Check if user already exists in PostgreSQL
+      const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: "An account with this email already exists.",
+        });
+      }
+
+      // Hash password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Create user in PostgreSQL
+      const newUser = await prisma.user.create({
+        data: {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: normalizedEmail,
+          password: hashedPassword,
+        },
+      });
+
+      // Mint an opaque, database-backed session.
+      const { rawToken } = await createSession(newUser.id);
+
+      // Host-only HttpOnly cookie. The raw token is never placed in the body.
+      res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
+
+      return res.status(201).json({
+        success: true,
+        message: "Account created successfully.",
+        user: {
+          id: newUser.id,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          email: newUser.email,
+          role: newUser.role,
+        },
+      });
+    } catch (error) {
+      console.error("Signup error:", error);
+      return res.status(500).json({
         success: false,
-        message: "Please provide first name, last name, email, and password.",
+        message: "Server error during registration. Please try again.",
       });
     }
-
-    // Password strength is enforced by StrongPasswordSchema in the validator.
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    // Check if user already exists in PostgreSQL
-    const existingUser = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "An account with this email already exists.",
-      });
-    }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user in PostgreSQL
-    const newUser = await prisma.user.create({
-      data: {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: normalizedEmail,
-        password: hashedPassword,
-      },
-    });
-
-    // Mint an opaque, database-backed session.
-    const { rawToken } = await createSession(newUser.id);
-
-    // Host-only HttpOnly cookie. The raw token is never placed in the body.
-    res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
-
-    return res.status(201).json({
-      success: true,
-      message: "Account created successfully.",
-      user: {
-        id: newUser.id,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        email: newUser.email,
-        role: newUser.role,
-      },
-    });
-  } catch (error) {
-    console.error("Signup error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error during registration. Please try again.",
-    });
-  }
-});
+  });
 
 /**
  * @route   POST /api/login
@@ -204,86 +210,86 @@ app.post(
   authLimiter,
   validateRequest({ body: LoginSchema }),
   async (req, res) => {
-  try {
-    const { email, password } = res.locals.validated.body;
+    try {
+      const { email, password } = res.locals.validated.body;
 
-    if (!email || !password) {
-      return res.status(400).json({
+      if (!email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Please enter both email and password.",
+        });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      const user = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid email or password.",
+        });
+      }
+
+      // Check password match
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid email or password.",
+        });
+      }
+
+      // Check account lifecycle status (Kill-switch check)
+      if (user.status === "SUSPENDED") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account has been suspended. Please contact support or an administrator.",
+        });
+      }
+
+      if (user.status !== "ACTIVE") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is not active. Please complete account activation.",
+        });
+      }
+
+      // Update lastLogin
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLogin: new Date() },
+      });
+
+      // Mint an opaque, database-backed session.
+      const { rawToken } = await createSession(user.id);
+
+      // Host-only HttpOnly cookie. The raw token is never placed in the body.
+      res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
+
+      return res.status(200).json({
+        success: true,
+        message: "Logged in successfully!",
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          mustChangePassword: user.mustChangePassword,
+        },
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      return res.status(500).json({
         success: false,
-        message: "Please enter both email and password.",
+        message: "Server error during login. Please try again.",
       });
     }
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password.",
-      });
-    }
-
-    // Check password match
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password.",
-      });
-    }
-
-    // Check account lifecycle status (Kill-switch check)
-    if (user.status === "SUSPENDED") {
-      return res.status(403).json({
-        success: false,
-        message: "Your account has been suspended. Please contact support or an administrator.",
-      });
-    }
-
-    if (user.status !== "ACTIVE") {
-      return res.status(403).json({
-        success: false,
-        message: "Your account is not active. Please complete account activation.",
-      });
-    }
-
-    // Update lastLogin
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLogin: new Date() },
-    });
-
-    // Mint an opaque, database-backed session.
-    const { rawToken } = await createSession(user.id);
-
-    // Host-only HttpOnly cookie. The raw token is never placed in the body.
-    res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
-
-    return res.status(200).json({
-      success: true,
-      message: "Logged in successfully!",
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        mustChangePassword: user.mustChangePassword,
-      },
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error during login. Please try again.",
-    });
-  }
-});
+  });
 
 /**
  * @route   POST /api/logout
@@ -569,90 +575,90 @@ app.post(
   ...requireAdmin,
   validateRequest({ body: UserInviteSchema }),
   async (req, res) => {
-  try {
-    const { firstName, lastName, email, role, password } = res.locals.validated.body;
+    try {
+      const { firstName, lastName, email, role, password } = res.locals.validated.body;
 
-    if (!firstName || !lastName || !email || !role) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide first name, last name, email, and role.",
-      });
-    }
-
-    if (role === "SUPER_ADMIN" && req.user.role !== "SUPER_ADMIN") {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied: Only Super Admins can assign or invite Super Admin accounts.",
-      });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    const existingUser = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "A user with this email already exists.",
-      });
-    }
-
-    let finalPassword = password && typeof password === "string" ? password.trim() : null;
-    let autoGenerated = false;
-
-    if (finalPassword) {
-      if (finalPassword.length < 8) {
+      if (!firstName || !lastName || !email || !role) {
         return res.status(400).json({
           success: false,
-          message: "Password must be at least 8 characters long.",
+          message: "Please provide first name, last name, email, and role.",
         });
       }
-    } else {
-      finalPassword = generateTemporaryPassword(12);
-      autoGenerated = true;
+
+      if (role === "SUPER_ADMIN" && req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: Only Super Admins can assign or invite Super Admin accounts.",
+        });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: "A user with this email already exists.",
+        });
+      }
+
+      let finalPassword = password && typeof password === "string" ? password.trim() : null;
+      let autoGenerated = false;
+
+      if (finalPassword) {
+        if (finalPassword.length < 8) {
+          return res.status(400).json({
+            success: false,
+            message: "Password must be at least 8 characters long.",
+          });
+        }
+      } else {
+        finalPassword = generateTemporaryPassword(12);
+        autoGenerated = true;
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(finalPassword, salt);
+
+      const newUser = await prisma.user.create({
+        data: {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: normalizedEmail,
+          password: hashedPassword,
+          role,
+          status: "ACTIVE",
+          // An administrator-chosen or auto-generated password is known to
+          // someone other than the account holder, so it must be replaced
+          // before the account can exercise its privileges.
+          mustChangePassword: true,
+        },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          status: true,
+          mustChangePassword: true,
+          createdAt: true,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: `User created successfully with role ${role}.`,
+        user: newUser,
+        temporaryPassword: autoGenerated ? finalPassword : null,
+      });
+    } catch (error) {
+      console.error("Invite user error:", error);
+      return res.status(500).json({ success: false, message: "Failed to create user" });
     }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(finalPassword, salt);
-
-    const newUser = await prisma.user.create({
-      data: {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: normalizedEmail,
-        password: hashedPassword,
-        role,
-        status: "ACTIVE",
-        // An administrator-chosen or auto-generated password is known to
-        // someone other than the account holder, so it must be replaced
-        // before the account can exercise its privileges.
-        mustChangePassword: true,
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        status: true,
-        mustChangePassword: true,
-        createdAt: true,
-      },
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: `User created successfully with role ${role}.`,
-      user: newUser,
-      temporaryPassword: autoGenerated ? finalPassword : null,
-    });
-  } catch (error) {
-    console.error("Invite user error:", error);
-    return res.status(500).json({ success: false, message: "Failed to create user" });
-  }
-});
+  });
 
 /**
  * @route   PATCH /api/admin/users/:id
@@ -665,118 +671,118 @@ app.patch(
   ...requireAdmin,
   validateRequest({ params: UserIdParamSchema, body: UserUpdateSchema }),
   async (req, res) => {
-  try {
-    const { id } = res.locals.validated.params;
-    const { firstName, lastName, role, status, password } = res.locals.validated.body;
-    const caller = req.user;
+    try {
+      const { id } = res.locals.validated.params;
+      const { firstName, lastName, role, status, password } = res.locals.validated.body;
+      const caller = req.user;
 
-    const existingUser = await prisma.user.findUnique({ where: { id } });
-    if (!existingUser) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
-
-    // Role Hierarchy & Self-Modification Security Rules:
-    // 1. A user cannot change their own role or status via this administrative endpoint
-    if (id === caller.id) {
-      if (role !== undefined && role !== caller.role) {
-        return res.status(403).json({
-          success: false,
-          message: "You cannot change your own role.",
-        });
-      }
-      if (status !== undefined && status !== caller.status) {
-        return res.status(403).json({
-          success: false,
-          message: "You cannot change your own account status.",
-        });
-      }
-    }
-
-    // 2. Non-SUPER_ADMIN callers (e.g. ADMIN) have restricted management permissions
-    if (caller.role !== "SUPER_ADMIN") {
-      // Cannot assign SUPER_ADMIN role to anyone
-      if (role === "SUPER_ADMIN") {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied: Only Super Admins can assign the SUPER_ADMIN role.",
-        });
+      const existingUser = await prisma.user.findUnique({ where: { id } });
+      if (!existingUser) {
+        return res.status(404).json({ success: false, message: "User not found." });
       }
 
-      // Cannot modify a SUPER_ADMIN account
-      if (existingUser.role === "SUPER_ADMIN") {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied: Cannot modify a Super Admin account.",
-        });
-      }
-
-      // Cannot modify another ADMIN's role, status, or credentials
-      if (existingUser.role === "ADMIN" && existingUser.id !== caller.id) {
-        if (role !== undefined || status !== undefined || password !== undefined) {
+      // Role Hierarchy & Self-Modification Security Rules:
+      // 1. A user cannot change their own role or status via this administrative endpoint
+      if (id === caller.id) {
+        if (role !== undefined && role !== caller.role) {
           return res.status(403).json({
             success: false,
-            message: "Access denied: Cannot modify another Administrator's privileged settings or credentials.",
+            message: "You cannot change your own role.",
+          });
+        }
+        if (status !== undefined && status !== caller.status) {
+          return res.status(403).json({
+            success: false,
+            message: "You cannot change your own account status.",
           });
         }
       }
+
+      // 2. Non-SUPER_ADMIN callers (e.g. ADMIN) have restricted management permissions
+      if (caller.role !== "SUPER_ADMIN") {
+        // Cannot assign SUPER_ADMIN role to anyone
+        if (role === "SUPER_ADMIN") {
+          return res.status(403).json({
+            success: false,
+            message: "Access denied: Only Super Admins can assign the SUPER_ADMIN role.",
+          });
+        }
+
+        // Cannot modify a SUPER_ADMIN account
+        if (existingUser.role === "SUPER_ADMIN") {
+          return res.status(403).json({
+            success: false,
+            message: "Access denied: Cannot modify a Super Admin account.",
+          });
+        }
+
+        // Cannot modify another ADMIN's role, status, or credentials
+        if (existingUser.role === "ADMIN" && existingUser.id !== caller.id) {
+          if (role !== undefined || status !== undefined || password !== undefined) {
+            return res.status(403).json({
+              success: false,
+              message: "Access denied: Cannot modify another Administrator's privileged settings or credentials.",
+            });
+          }
+        }
+      }
+
+      const VALID_ROLES = ["SUPER_ADMIN", "ADMIN", "EDITOR", "STUDENT", "CONSULTANT"];
+      if (role !== undefined && !VALID_ROLES.includes(role)) {
+        return res.status(400).json({ success: false, message: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
+      }
+
+      const VALID_STATUSES = ["ACTIVE", "INVITED", "SUSPENDED"];
+      if (status !== undefined && !VALID_STATUSES.includes(status)) {
+        return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` });
+      }
+
+      const updateData = {};
+      if (firstName !== undefined && firstName.trim()) updateData.firstName = firstName.trim();
+      if (lastName !== undefined && lastName.trim()) updateData.lastName = lastName.trim();
+      if (role !== undefined) updateData.role = role;
+      if (status !== undefined) updateData.status = status;
+
+      // Safely hash password with bcrypt if provided
+      const passwordWasReset = Boolean(password && password.trim());
+      if (passwordWasReset) {
+        const salt = await bcrypt.genSalt(10);
+        updateData.password = await bcrypt.hash(password.trim(), salt);
+        // An administrator now knows this password; the holder must replace it.
+        updateData.mustChangePassword = true;
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          status: true,
+          mustChangePassword: true,
+          lastLogin: true,
+          createdAt: true,
+        },
+      });
+
+      // A password reset or a suspension must not leave live sessions behind.
+      if (passwordWasReset || updateData.status === "SUSPENDED") {
+        await revokeAllSessionsForUser(id);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `User ${updatedUser.email} updated successfully.`,
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error("Update user error:", error);
+      return res.status(500).json({ success: false, message: "Failed to update user." });
     }
-
-    const VALID_ROLES = ["SUPER_ADMIN", "ADMIN", "EDITOR", "STUDENT", "CONSULTANT"];
-    if (role !== undefined && !VALID_ROLES.includes(role)) {
-      return res.status(400).json({ success: false, message: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
-    }
-
-    const VALID_STATUSES = ["ACTIVE", "INVITED", "SUSPENDED"];
-    if (status !== undefined && !VALID_STATUSES.includes(status)) {
-      return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` });
-    }
-
-    const updateData = {};
-    if (firstName !== undefined && firstName.trim()) updateData.firstName = firstName.trim();
-    if (lastName !== undefined && lastName.trim()) updateData.lastName = lastName.trim();
-    if (role !== undefined) updateData.role = role;
-    if (status !== undefined) updateData.status = status;
-
-    // Safely hash password with bcrypt if provided
-    const passwordWasReset = Boolean(password && password.trim());
-    if (passwordWasReset) {
-      const salt = await bcrypt.genSalt(10);
-      updateData.password = await bcrypt.hash(password.trim(), salt);
-      // An administrator now knows this password; the holder must replace it.
-      updateData.mustChangePassword = true;
-    }
-
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        status: true,
-        mustChangePassword: true,
-        lastLogin: true,
-        createdAt: true,
-      },
-    });
-
-    // A password reset or a suspension must not leave live sessions behind.
-    if (passwordWasReset || updateData.status === "SUSPENDED") {
-      await revokeAllSessionsForUser(id);
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: `User ${updatedUser.email} updated successfully.`,
-      user: updatedUser,
-    });
-  } catch (error) {
-    console.error("Update user error:", error);
-    return res.status(500).json({ success: false, message: "Failed to update user." });
-  }
-});
+  });
 
 /**
  * @route   DELETE /api/admin/users/:id
@@ -789,33 +795,33 @@ app.delete(
   adminMutationLimiter,
   validateRequest({ params: UserIdParamSchema }),
   async (req, res) => {
-  try {
-    const { id } = res.locals.validated.params;
+    try {
+      const { id } = res.locals.validated.params;
 
-    // Prevent self-deletion
-    if (id === req.user.id) {
-      return res.status(400).json({
-        success: false,
-        message: "You cannot delete your own account.",
+      // Prevent self-deletion
+      if (id === req.user.id) {
+        return res.status(400).json({
+          success: false,
+          message: "You cannot delete your own account.",
+        });
+      }
+
+      const existingUser = await prisma.user.findUnique({ where: { id } });
+      if (!existingUser) {
+        return res.status(404).json({ success: false, message: "User not found." });
+      }
+
+      await prisma.user.delete({ where: { id } });
+
+      return res.status(200).json({
+        success: true,
+        message: `User ${existingUser.email} deleted successfully.`,
       });
+    } catch (error) {
+      console.error("Delete user error:", error);
+      return res.status(500).json({ success: false, message: "Failed to delete user." });
     }
-
-    const existingUser = await prisma.user.findUnique({ where: { id } });
-    if (!existingUser) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
-
-    await prisma.user.delete({ where: { id } });
-
-    return res.status(200).json({
-      success: true,
-      message: `User ${existingUser.email} deleted successfully.`,
-    });
-  } catch (error) {
-    console.error("Delete user error:", error);
-    return res.status(500).json({ success: false, message: "Failed to delete user." });
-  }
-});
+  });
 
 // ============================================================
 // COUNTRIES LIST (for admin form dropdowns)
@@ -852,56 +858,56 @@ app.get(
   ...requireEditor,
   validateRequest({ query: ArticleQuerySchema }),
   async (req, res) => {
-  try {
-    // Zod has already coerced and bounded page/limit, so no reparsing here.
-    const {
-      status,
-      category,
-      search,
-      page: pageNum,
-      limit: limitNum,
-    } = res.locals.validated.query;
-    const skip = (pageNum - 1) * limitNum;
+    try {
+      // Zod has already coerced and bounded page/limit, so no reparsing here.
+      const {
+        status,
+        category,
+        search,
+        page: pageNum,
+        limit: limitNum,
+      } = res.locals.validated.query;
+      const skip = (pageNum - 1) * limitNum;
 
-    const where = {};
-    if (status && status !== "ALL") where.status = status;
-    if (category && category !== "ALL") where.category = category;
-    if (search) {
-      where.OR = [
-        { headline: { contains: search, mode: "insensitive" } },
-        { summary: { contains: search, mode: "insensitive" } },
-        { slug: { contains: search, mode: "insensitive" } },
-      ];
-    }
+      const where = {};
+      if (status && status !== "ALL") where.status = status;
+      if (category && category !== "ALL") where.category = category;
+      if (search) {
+        where.OR = [
+          { headline: { contains: search, mode: "insensitive" } },
+          { summary: { contains: search, mode: "insensitive" } },
+          { slug: { contains: search, mode: "insensitive" } },
+        ];
+      }
 
-    const [articles, totalCount] = await prisma.$transaction([
-      prisma.article.findMany({
-        where,
-        skip,
-        take: limitNum,
-        orderBy: { createdAt: "desc" },
-        include: {
-          countries: {
-            include: { country: { select: { id: true, name: true, flag: true } } },
+      const [articles, totalCount] = await prisma.$transaction([
+        prisma.article.findMany({
+          where,
+          skip,
+          take: limitNum,
+          orderBy: { createdAt: "desc" },
+          include: {
+            countries: {
+              include: { country: { select: { id: true, name: true, flag: true } } },
+            },
+            primaryCountry: { select: { id: true, name: true, flag: true } },
           },
-          primaryCountry: { select: { id: true, name: true, flag: true } },
-        },
-      }),
-      prisma.article.count({ where }),
-    ]);
+        }),
+        prisma.article.count({ where }),
+      ]);
 
-    return res.status(200).json({
-      success: true,
-      articles,
-      totalCount,
-      totalPages: Math.ceil(totalCount / limitNum),
-      currentPage: pageNum,
-    });
-  } catch (error) {
-    console.error("Fetch admin articles error:", error);
-    return res.status(500).json({ success: false, message: "Failed to fetch articles" });
-  }
-});
+      return res.status(200).json({
+        success: true,
+        articles,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limitNum),
+        currentPage: pageNum,
+      });
+    } catch (error) {
+      console.error("Fetch admin articles error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch articles" });
+    }
+  });
 
 /**
  * @route   POST /api/admin/articles
@@ -914,87 +920,87 @@ app.post(
   adminMutationLimiter,
   validateRequest({ body: ArticleCreateSchema }),
   async (req, res) => {
-  try {
-    const {
-      slug, headline, summary, content, category, image,
-      readingTime, breaking, featured, status, primaryCountryId, countryIds,
-    } = res.locals.validated.body;
+    try {
+      const {
+        slug, headline, summary, content, category, image,
+        readingTime, breaking, featured, status, primaryCountryId, countryIds,
+      } = res.locals.validated.body;
 
-    if (!headline || !headline.trim()) {
-      return res.status(400).json({ success: false, message: "Headline is required." });
-    }
-    if (!slug || !slug.trim()) {
-      return res.status(400).json({ success: false, message: "Slug is required." });
-    }
-    if (!summary || !summary.trim()) {
-      return res.status(400).json({ success: false, message: "Summary is required." });
-    }
-    if (!category) {
-      return res.status(400).json({ success: false, message: "Category is required." });
-    }
-
-    const validCategories = ["UNIVERSITIES", "ADMISSIONS", "SCHOLARSHIPS", "VISA", "STUDENT_LIFE", "CAREER"];
-    if (!validCategories.includes(category)) {
-      return res.status(400).json({ success: false, message: "Invalid category value." });
-    }
-
-    const cleanSlug = slug.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-    const existing = await prisma.article.findUnique({ where: { slug: cleanSlug } });
-    if (existing) {
-      return res.status(400).json({ success: false, message: "An article with this slug already exists. Please use a different slug." });
-    }
-
-    const validStatuses = ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "ARCHIVED", "REJECTED"];
-    const articleStatus = validStatuses.includes(status) ? status : "DRAFT";
-
-    const newArticle = await prisma.$transaction(async (tx) => {
-      const article = await tx.article.create({
-        data: {
-          slug: cleanSlug,
-          headline: headline.trim(),
-          summary: summary.trim(),
-          content: content?.trim() || null,
-          category,
-          image: image?.trim() || null,
-          readingTime: readingTime?.trim() || "4 min read",
-          breaking: Boolean(breaking),
-          featured: Boolean(featured),
-          status: articleStatus,
-          publishedAt: new Date(),
-          primaryCountryId: primaryCountryId || null,
-        },
-      });
-
-      if (Array.isArray(countryIds) && countryIds.length > 0) {
-        await tx.articleCountry.createMany({
-          data: countryIds.map((countryId) => ({ articleId: article.id, countryId })),
-          skipDuplicates: true,
-        });
+      if (!headline || !headline.trim()) {
+        return res.status(400).json({ success: false, message: "Headline is required." });
+      }
+      if (!slug || !slug.trim()) {
+        return res.status(400).json({ success: false, message: "Slug is required." });
+      }
+      if (!summary || !summary.trim()) {
+        return res.status(400).json({ success: false, message: "Summary is required." });
+      }
+      if (!category) {
+        return res.status(400).json({ success: false, message: "Category is required." });
       }
 
-      return tx.article.findUnique({
-        where: { id: article.id },
-        include: {
-          countries: { include: { country: true } },
-          primaryCountry: true,
-        },
-      });
-    });
+      const validCategories = ["UNIVERSITIES", "ADMISSIONS", "SCHOLARSHIPS", "VISA", "STUDENT_LIFE", "CAREER"];
+      if (!validCategories.includes(category)) {
+        return res.status(400).json({ success: false, message: "Invalid category value." });
+      }
 
-    return res.status(201).json({
-      success: true,
-      message: "Article created successfully.",
-      article: newArticle,
-    });
-  } catch (error) {
-    console.error("Create article error:", error);
-    if (error.code === "P2002") {
-      const field = error.meta?.target ? ` (${error.meta.target.join(", ")})` : "";
-      return res.status(409).json({ success: false, message: `An article with this unique value${field} already exists.` });
+      const cleanSlug = slug.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      const existing = await prisma.article.findUnique({ where: { slug: cleanSlug } });
+      if (existing) {
+        return res.status(400).json({ success: false, message: "An article with this slug already exists. Please use a different slug." });
+      }
+
+      const validStatuses = ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "ARCHIVED", "REJECTED"];
+      const articleStatus = validStatuses.includes(status) ? status : "DRAFT";
+
+      const newArticle = await prisma.$transaction(async (tx) => {
+        const article = await tx.article.create({
+          data: {
+            slug: cleanSlug,
+            headline: headline.trim(),
+            summary: summary.trim(),
+            content: content?.trim() || null,
+            category,
+            image: image?.trim() || null,
+            readingTime: readingTime?.trim() || "4 min read",
+            breaking: Boolean(breaking),
+            featured: Boolean(featured),
+            status: articleStatus,
+            publishedAt: new Date(),
+            primaryCountryId: primaryCountryId || null,
+          },
+        });
+
+        if (Array.isArray(countryIds) && countryIds.length > 0) {
+          await tx.articleCountry.createMany({
+            data: countryIds.map((countryId) => ({ articleId: article.id, countryId })),
+            skipDuplicates: true,
+          });
+        }
+
+        return tx.article.findUnique({
+          where: { id: article.id },
+          include: {
+            countries: { include: { country: true } },
+            primaryCountry: true,
+          },
+        });
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Article created successfully.",
+        article: newArticle,
+      });
+    } catch (error) {
+      console.error("Create article error:", error);
+      if (error.code === "P2002") {
+        const field = error.meta?.target ? ` (${error.meta.target.join(", ")})` : "";
+        return res.status(409).json({ success: false, message: `An article with this unique value${field} already exists.` });
+      }
+      return res.status(500).json({ success: false, message: "Failed to create article." });
     }
-    return res.status(500).json({ success: false, message: "Failed to create article." });
-  }
-});
+  });
 
 /**
  * @route   PUT /api/admin/articles/:id
@@ -1007,72 +1013,72 @@ app.put(
   adminMutationLimiter,
   validateRequest({ params: ArticleIdParamSchema, body: ArticleUpdateSchema }),
   async (req, res) => {
-  try {
-    const { id } = res.locals.validated.params;
-    const {
-      slug, headline, summary, content, category, image,
-      readingTime, breaking, featured, status, primaryCountryId, countryIds,
-    } = res.locals.validated.body;
+    try {
+      const { id } = res.locals.validated.params;
+      const {
+        slug, headline, summary, content, category, image,
+        readingTime, breaking, featured, status, primaryCountryId, countryIds,
+      } = res.locals.validated.body;
 
-    if (!headline?.trim()) return res.status(400).json({ success: false, message: "Headline is required." });
-    if (!slug?.trim()) return res.status(400).json({ success: false, message: "Slug is required." });
-    if (!summary?.trim()) return res.status(400).json({ success: false, message: "Summary is required." });
+      if (!headline?.trim()) return res.status(400).json({ success: false, message: "Headline is required." });
+      if (!slug?.trim()) return res.status(400).json({ success: false, message: "Slug is required." });
+      if (!summary?.trim()) return res.status(400).json({ success: false, message: "Summary is required." });
 
-    const cleanSlug = slug.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-    const slugConflict = await prisma.article.findFirst({ where: { slug: cleanSlug, NOT: { id } } });
-    if (slugConflict) {
-      return res.status(400).json({ success: false, message: "This slug is already in use by another article." });
-    }
-
-    const validStatuses = ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "ARCHIVED", "REJECTED"];
-    const articleStatus = validStatuses.includes(status) ? status : "DRAFT";
-
-    const updatedArticle = await prisma.$transaction(async (tx) => {
-      await tx.article.update({
-        where: { id },
-        data: {
-          slug: cleanSlug,
-          headline: headline.trim(),
-          summary: summary.trim(),
-          content: content?.trim() || null,
-          category,
-          image: image?.trim() || null,
-          readingTime: readingTime?.trim() || "4 min read",
-          breaking: Boolean(breaking),
-          featured: Boolean(featured),
-          status: articleStatus,
-          primaryCountryId: primaryCountryId || null,
-        },
-      });
-
-      await tx.articleCountry.deleteMany({ where: { articleId: id } });
-      if (Array.isArray(countryIds) && countryIds.length > 0) {
-        await tx.articleCountry.createMany({
-          data: countryIds.map((countryId) => ({ articleId: id, countryId })),
-          skipDuplicates: true,
-        });
+      const cleanSlug = slug.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      const slugConflict = await prisma.article.findFirst({ where: { slug: cleanSlug, NOT: { id } } });
+      if (slugConflict) {
+        return res.status(400).json({ success: false, message: "This slug is already in use by another article." });
       }
 
-      return tx.article.findUnique({
-        where: { id },
-        include: {
-          countries: { include: { country: true } },
-          primaryCountry: true,
-        },
-      });
-    });
+      const validStatuses = ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "ARCHIVED", "REJECTED"];
+      const articleStatus = validStatuses.includes(status) ? status : "DRAFT";
 
-    return res.status(200).json({ success: true, message: "Article updated successfully.", article: updatedArticle });
-  } catch (error) {
-    console.error("Update article error:", error);
-    if (error.code === "P2025") return res.status(404).json({ success: false, message: "Article not found." });
-    if (error.code === "P2002") {
-      const field = error.meta?.target ? ` (${error.meta.target.join(", ")})` : "";
-      return res.status(409).json({ success: false, message: `An article with this unique value${field} already exists.` });
+      const updatedArticle = await prisma.$transaction(async (tx) => {
+        await tx.article.update({
+          where: { id },
+          data: {
+            slug: cleanSlug,
+            headline: headline.trim(),
+            summary: summary.trim(),
+            content: content?.trim() || null,
+            category,
+            image: image?.trim() || null,
+            readingTime: readingTime?.trim() || "4 min read",
+            breaking: Boolean(breaking),
+            featured: Boolean(featured),
+            status: articleStatus,
+            primaryCountryId: primaryCountryId || null,
+          },
+        });
+
+        await tx.articleCountry.deleteMany({ where: { articleId: id } });
+        if (Array.isArray(countryIds) && countryIds.length > 0) {
+          await tx.articleCountry.createMany({
+            data: countryIds.map((countryId) => ({ articleId: id, countryId })),
+            skipDuplicates: true,
+          });
+        }
+
+        return tx.article.findUnique({
+          where: { id },
+          include: {
+            countries: { include: { country: true } },
+            primaryCountry: true,
+          },
+        });
+      });
+
+      return res.status(200).json({ success: true, message: "Article updated successfully.", article: updatedArticle });
+    } catch (error) {
+      console.error("Update article error:", error);
+      if (error.code === "P2025") return res.status(404).json({ success: false, message: "Article not found." });
+      if (error.code === "P2002") {
+        const field = error.meta?.target ? ` (${error.meta.target.join(", ")})` : "";
+        return res.status(409).json({ success: false, message: `An article with this unique value${field} already exists.` });
+      }
+      return res.status(500).json({ success: false, message: "Failed to update article." });
     }
-    return res.status(500).json({ success: false, message: "Failed to update article." });
-  }
-});
+  });
 
 /**
  * @route   PATCH /api/admin/articles/:id/status
@@ -1085,27 +1091,27 @@ app.patch(
   adminMutationLimiter,
   validateRequest({ params: ArticleIdParamSchema, body: ArticleStatusUpdateSchema }),
   async (req, res) => {
-  try {
-    const { id } = res.locals.validated.params;
-    const { status } = res.locals.validated.body;
-    const validStatuses = ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "ARCHIVED", "REJECTED"];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+    try {
+      const { id } = res.locals.validated.params;
+      const { status } = res.locals.validated.body;
+      const validStatuses = ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "ARCHIVED", "REJECTED"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+      }
+
+      const article = await prisma.article.update({
+        where: { id },
+        data: { status, publishedAt: status === "PUBLISHED" ? new Date() : undefined },
+        select: { id: true, slug: true, headline: true, status: true },
+      });
+
+      return res.status(200).json({ success: true, message: `Article status changed to ${status}.`, article });
+    } catch (error) {
+      console.error("Update status error:", error);
+      if (error.code === "P2025") return res.status(404).json({ success: false, message: "Article not found." });
+      return res.status(500).json({ success: false, message: "Failed to update article status." });
     }
-
-    const article = await prisma.article.update({
-      where: { id },
-      data: { status, publishedAt: status === "PUBLISHED" ? new Date() : undefined },
-      select: { id: true, slug: true, headline: true, status: true },
-    });
-
-    return res.status(200).json({ success: true, message: `Article status changed to ${status}.`, article });
-  } catch (error) {
-    console.error("Update status error:", error);
-    if (error.code === "P2025") return res.status(404).json({ success: false, message: "Article not found." });
-    return res.status(500).json({ success: false, message: "Failed to update article status." });
-  }
-});
+  });
 
 /**
  * @route   DELETE /api/admin/articles/:id
@@ -1118,16 +1124,16 @@ app.delete(
   adminMutationLimiter,
   validateRequest({ params: ArticleIdParamSchema }),
   async (req, res) => {
-  try {
-    const { id } = res.locals.validated.params;
-    await prisma.article.delete({ where: { id } });
-    return res.status(200).json({ success: true, message: "Article deleted successfully." });
-  } catch (error) {
-    console.error("Delete article error:", error);
-    if (error.code === "P2025") return res.status(404).json({ success: false, message: "Article not found." });
-    return res.status(500).json({ success: false, message: "Failed to delete article." });
-  }
-});
+    try {
+      const { id } = res.locals.validated.params;
+      await prisma.article.delete({ where: { id } });
+      return res.status(200).json({ success: true, message: "Article deleted successfully." });
+    } catch (error) {
+      console.error("Delete article error:", error);
+      if (error.code === "P2025") return res.status(404).json({ success: false, message: "Article not found." });
+      return res.status(500).json({ success: false, message: "Failed to delete article." });
+    }
+  });
 
 // ============================================================
 // RSS UTILITIES — supports Atom AND RSS 2.0
@@ -1545,160 +1551,160 @@ app.post(
   adminMutationLimiter,
   validateRequest({ body: RssImportSchema }),
   async (req, res) => {
-  try {
-    const { rssSourceId, sourceUrl: clientSourceUrl } = res.locals.validated.body;
+    try {
+      const { rssSourceId, sourceUrl: clientSourceUrl } = res.locals.validated.body;
 
-    // ── 1. Validate inputs ──────────────────────────────────────────────────
-    if (!rssSourceId || typeof rssSourceId !== "string") {
-      return res.status(400).json({ success: false, message: "rssSourceId is required." });
-    }
-    if (!clientSourceUrl || typeof clientSourceUrl !== "string") {
-      return res.status(400).json({ success: false, message: "sourceUrl is required." });
-    }
-
-    // ── 2. Validate RSSSource from DB (do NOT trust arbitrary source data) ──
-    const dbSource = await prisma.rSSSource.findUnique({ where: { id: rssSourceId } });
-    if (!dbSource) {
-      return res.status(404).json({ success: false, message: `Unknown RSS source: ${rssSourceId}` });
-    }
-    if (!dbSource.enabled) {
-      return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" is disabled.` });
-    }
-    if (!dbSource.feedUrl) {
-      return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" has no feed URL.` });
-    }
-    if (!dbSource.countryId) {
-      return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" has no country mapping.` });
-    }
-
-    // ── 3. Re-fetch the live feed server-side ───────────────────────────────
-    const entries = await fetchAtomEntriesRaw(dbSource.feedUrl, `Import ${rssSourceId}`);
-    if (entries.length === 0) {
-      return res.status(502).json({ success: false, message: "RSS feed is currently unavailable or empty." });
-    }
-
-    // ── 4. Find the matching entry by sourceUrl ─────────────────────────────
-    let matchedEntry = null;
-    for (const entry of entries) {
-      const url = extractLink(entry?.link);
-      if (url === clientSourceUrl) {
-        matchedEntry = entry;
-        break;
+      // ── 1. Validate inputs ──────────────────────────────────────────────────
+      if (!rssSourceId || typeof rssSourceId !== "string") {
+        return res.status(400).json({ success: false, message: "rssSourceId is required." });
       }
-    }
-
-    if (!matchedEntry) {
-      // Item may have dropped off the feed window; fall back to client-provided data
-      // but re-validate the sourceUrl domain matches the known feed domain
-      const feedDomain = new URL(dbSource.feedUrl).hostname;
-      let clientDomain;
-      try { clientDomain = new URL(clientSourceUrl).hostname; } catch {
-        return res.status(400).json({ success: false, message: "Invalid sourceUrl provided." });
+      if (!clientSourceUrl || typeof clientSourceUrl !== "string") {
+        return res.status(400).json({ success: false, message: "sourceUrl is required." });
       }
-      if (!clientDomain.includes(feedDomain.split(".").slice(-2).join("."))) {
-        return res.status(400).json({
+
+      // ── 2. Validate RSSSource from DB (do NOT trust arbitrary source data) ──
+      const dbSource = await prisma.rSSSource.findUnique({ where: { id: rssSourceId } });
+      if (!dbSource) {
+        return res.status(404).json({ success: false, message: `Unknown RSS source: ${rssSourceId}` });
+      }
+      if (!dbSource.enabled) {
+        return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" is disabled.` });
+      }
+      if (!dbSource.feedUrl) {
+        return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" has no feed URL.` });
+      }
+      if (!dbSource.countryId) {
+        return res.status(400).json({ success: false, message: `RSS source "${dbSource.name}" has no country mapping.` });
+      }
+
+      // ── 3. Re-fetch the live feed server-side ───────────────────────────────
+      const entries = await fetchAtomEntriesRaw(dbSource.feedUrl, `Import ${rssSourceId}`);
+      if (entries.length === 0) {
+        return res.status(502).json({ success: false, message: "RSS feed is currently unavailable or empty." });
+      }
+
+      // ── 4. Find the matching entry by sourceUrl ─────────────────────────────
+      let matchedEntry = null;
+      for (const entry of entries) {
+        const url = extractLink(entry?.link);
+        if (url === clientSourceUrl) {
+          matchedEntry = entry;
+          break;
+        }
+      }
+
+      if (!matchedEntry) {
+        // Item may have dropped off the feed window; fall back to client-provided data
+        // but re-validate the sourceUrl domain matches the known feed domain
+        const feedDomain = new URL(dbSource.feedUrl).hostname;
+        let clientDomain;
+        try { clientDomain = new URL(clientSourceUrl).hostname; } catch {
+          return res.status(400).json({ success: false, message: "Invalid sourceUrl provided." });
+        }
+        if (!clientDomain.includes(feedDomain.split(".").slice(-2).join("."))) {
+          return res.status(400).json({
+            success: false,
+            message: "The provided sourceUrl does not match the expected feed domain.",
+          });
+        }
+        // Entry has aged off feed — cannot re-validate; refuse
+        return res.status(404).json({
           success: false,
-          message: "The provided sourceUrl does not match the expected feed domain.",
+          message: "This RSS item is no longer available in the feed. It may have aged off. Please refresh the RSS preview.",
         });
       }
-      // Entry has aged off feed — cannot re-validate; refuse
-      return res.status(404).json({
-        success: false,
-        message: "This RSS item is no longer available in the feed. It may have aged off. Please refresh the RSS preview.",
+
+      // ── 5. Normalize from authoritative server-side data ───────────────────
+      const normalized = normalizeRssEntry(matchedEntry, dbSource);
+      if (!normalized) {
+        return res.status(422).json({ success: false, message: "Could not normalize this RSS entry (missing title or URL)." });
+      }
+
+      // ── 6. Duplicate check by sourceUrl (primary) ──────────────────────────
+      const duplicate = await prisma.article.findFirst({
+        where: { sourceUrl: normalized.sourceUrl },
+        select: { id: true, slug: true, status: true },
       });
-    }
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          alreadyImported: true,
+          message: "This article has already been imported.",
+          existingArticleId: duplicate.id,
+          existingSlug: duplicate.slug,
+          existingStatus: duplicate.status,
+        });
+      }
 
-    // ── 5. Normalize from authoritative server-side data ───────────────────
-    const normalized = normalizeRssEntry(matchedEntry, dbSource);
-    if (!normalized) {
-      return res.status(422).json({ success: false, message: "Could not normalize this RSS entry (missing title or URL)." });
-    }
+      // ── 7. Ensure slug uniqueness ───────────────────────────────────────────
+      let finalSlug = normalized.slug;
+      const slugExists = await prisma.article.findUnique({ where: { slug: finalSlug } });
+      if (slugExists) {
+        finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
+      }
 
-    // ── 6. Duplicate check by sourceUrl (primary) ──────────────────────────
-    const duplicate = await prisma.article.findFirst({
-      where: { sourceUrl: normalized.sourceUrl },
-      select: { id: true, slug: true, status: true },
-    });
-    if (duplicate) {
-      return res.status(409).json({
-        success: false,
-        alreadyImported: true,
-        message: "This article has already been imported.",
-        existingArticleId: duplicate.id,
-        existingSlug: duplicate.slug,
-        existingStatus: duplicate.status,
-      });
-    }
+      // ── 8. Parse publication date safely ───────────────────────────────────
+      let publishedAt = new Date();
+      if (normalized.rawDate) {
+        const parsed = new Date(normalized.rawDate);
+        if (!isNaN(parsed.getTime())) publishedAt = parsed;
+      }
 
-    // ── 7. Ensure slug uniqueness ───────────────────────────────────────────
-    let finalSlug = normalized.slug;
-    const slugExists = await prisma.article.findUnique({ where: { slug: finalSlug } });
-    if (slugExists) {
-      finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
-    }
+      // ── 9. Create Article + ArticleCountry in a transaction ─────────────────
+      const newArticle = await prisma.$transaction(async (tx) => {
+        const article = await tx.article.create({
+          data: {
+            slug: finalSlug,
+            headline: normalized.headline,
+            summary: normalized.summary,
+            content: null,
+            category: normalized.category,
+            image: normalized.image,
+            readingTime: "3 min read",
+            breaking: false,
+            featured: false,
+            status: "DRAFT",
+            isRss: true,
+            sourceUrl: normalized.sourceUrl,
+            sourceName: normalized.sourceName,
+            rssSourceId: normalized.rssSourceId,
+            primaryCountryId: normalized.countryId,
+            publishedAt,
+          },
+        });
 
-    // ── 8. Parse publication date safely ───────────────────────────────────
-    let publishedAt = new Date();
-    if (normalized.rawDate) {
-      const parsed = new Date(normalized.rawDate);
-      if (!isNaN(parsed.getTime())) publishedAt = parsed;
-    }
+        // Create ArticleCountry junction row
+        await tx.articleCountry.create({
+          data: { articleId: article.id, countryId: normalized.countryId },
+        });
 
-    // ── 9. Create Article + ArticleCountry in a transaction ─────────────────
-    const newArticle = await prisma.$transaction(async (tx) => {
-      const article = await tx.article.create({
-        data: {
-          slug: finalSlug,
-          headline: normalized.headline,
-          summary: normalized.summary,
-          content: null,
-          category: normalized.category,
-          image: normalized.image,
-          readingTime: "3 min read",
-          breaking: false,
-          featured: false,
-          status: "DRAFT",
-          isRss: true,
-          sourceUrl: normalized.sourceUrl,
-          sourceName: normalized.sourceName,
-          rssSourceId: normalized.rssSourceId,
-          primaryCountryId: normalized.countryId,
-          publishedAt,
-        },
-      });
-
-      // Create ArticleCountry junction row
-      await tx.articleCountry.create({
-        data: { articleId: article.id, countryId: normalized.countryId },
+        return tx.article.findUnique({
+          where: { id: article.id },
+          include: {
+            countries: { include: { country: { select: { id: true, name: true, flag: true } } } },
+            primaryCountry: { select: { id: true, name: true, flag: true } },
+            rssSource: { select: { id: true, name: true } },
+          },
+        });
       });
 
-      return tx.article.findUnique({
-        where: { id: article.id },
-        include: {
-          countries: { include: { country: { select: { id: true, name: true, flag: true } } } },
-          primaryCountry: { select: { id: true, name: true, flag: true } },
-          rssSource: { select: { id: true, name: true } },
-        },
+      return res.status(201).json({
+        success: true,
+        message: `"${newArticle.headline}" imported as DRAFT.`,
+        article: newArticle,
       });
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: `"${newArticle.headline}" imported as DRAFT.`,
-      article: newArticle,
-    });
-  } catch (error) {
-    console.error("RSS import error:", error);
-    if (error.code === "P2002") {
-      return res.status(409).json({
-        success: false,
-        alreadyImported: true,
-        message: "This article has already been imported.",
-      });
+    } catch (error) {
+      console.error("RSS import error:", error);
+      if (error.code === "P2002") {
+        return res.status(409).json({
+          success: false,
+          alreadyImported: true,
+          message: "This article has already been imported.",
+        });
+      }
+      return res.status(500).json({ success: false, message: "Failed to import article. Please try again." });
     }
-    return res.status(500).json({ success: false, message: "Failed to import article. Please try again." });
-  }
-});
+  });
 
 // Health check endpoint
 

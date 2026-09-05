@@ -1,285 +1,295 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+/**
+ * Source Items — the ingestion corpus, and the editorial queue that sits on it.
+ *
+ * Every discovered item appears here, whatever the pipeline decided about it:
+ * an IGNORE with its reason on screen is how an operator confirms the
+ * prefilter is doing the right thing, so filtering those away by default would
+ * hide the evidence this screen exists to show.
+ */
+
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { FileSearch, ExternalLink, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { ListTree, ExternalLink, RefreshCw } from "lucide-react";
+
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { AdminEmptyState } from "@/components/admin/AdminTable";
-import { StatusBadge } from "@/components/admin/StatusBadge";
+import { AdminTableContainer, AdminEmptyState } from "@/components/admin/AdminTable";
 import {
+  CandidateBadge,
+  NoticeBar,
+  OriginNotice,
+  ProcessingBadge,
+  RouteBadge,
+} from "@/components/admin/ingestion/IngestionUi";
+import { getCatalogSources } from "@/lib/content-sources";
+import {
+  PROCESSING_STATUSES,
+  editorialLane,
+  formatRelative,
   getSourceItems,
-  createDraftFromSourceItem,
-  ignoreSourceItem,
-  ROUTING_LABELS,
-  type SourceItemSummary,
-} from "@/lib/source-items";
-import type { DataOrigin } from "@/lib/ingestion-api";
+  toScore,
+  type ProcessingStatus,
+  type SourceItemRow,
+} from "@/lib/ingestion-admin";
 
-const PROCESSING_FILTERS = [
-  "ALL",
-  "DISCOVERED",
-  "ENRICHED",
-  "SCORED",
-  "CLASSIFIED",
-  "ROUTED",
-  "IMPORTED",
-] as const;
+const PAGE_SIZE = 25;
 
-const ROUTING_STYLES: Record<string, string> = {
-  IGNORE: "bg-slate-100 text-slate-500 border-slate-200",
-  REVIEW: "bg-amber-50 text-amber-700 border-amber-200",
-  CREATE_DRAFT: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  PUBLISH: "bg-violet-50 text-violet-700 border-violet-200",
-};
-
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+/**
+ * `?source=<registry code>` deep-links here from a source row or from a source's
+ * operations screen. Reading it needs `useSearchParams`, which suspends, so the
+ * page body sits behind a boundary rather than opting the whole route out of
+ * prerendering.
+ */
+export default function AdminSourceItemsPage() {
+  return (
+    <Suspense fallback={<p className="py-16 text-center text-xs text-slate-500">Loading source items…</p>}>
+      <SourceItemsView />
+    </Suspense>
+  );
 }
 
-export default function AdminSourceItemsPage() {
+function SourceItemsView() {
   const searchParams = useSearchParams();
-  const sourceId = searchParams.get("sourceId") ?? undefined;
+  const [items, setItems] = useState<SourceItemRow[]>([]);
+  const [originNotice, setOriginNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [meta, setMeta] = useState<{ total?: number; totalPages?: number }>({});
 
-  const [items, setItems] = useState<SourceItemSummary[]>([]);
-  const [origin, setOrigin] = useState<DataOrigin>("FALLBACK");
-  const [apiNotice, setApiNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<(typeof PROCESSING_FILTERS)[number]>("ALL");
+  const [sourceCode, setSourceCode] = useState(() => searchParams.get("source") ?? "");
+  const [status, setStatus] = useState<ProcessingStatus | "">("");
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-  const load = (cancelledRef?: { cancelled: boolean }) => {
-    getSourceItems({ sourceId, status: status === "ALL" ? undefined : status })
-      .then((result) => {
-        if (cancelledRef?.cancelled) return;
-        setItems(result.data);
-        setOrigin(result.origin);
-        setApiNotice(result.notice ?? null);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!cancelledRef?.cancelled) setLoading(false);
-      });
-  };
+  const catalog = useMemo(() => getCatalogSources(), []);
+
+  /**
+   * Loading is derived from "which query have we finished?" rather than kept as
+   * its own flag. Two pieces of state that must agree is one more than needed,
+   * and setting a flag synchronously inside the effect would make the mount
+   * render twice for nothing.
+   */
+  const queryKey = `${sourceCode}|${status}|${page}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const loading = loadedKey !== queryKey;
+
+  const load = useCallback(async () => {
+    const result = await getSourceItems({
+      sourceId: sourceCode || undefined,
+      status: status || undefined,
+      page,
+      limit: PAGE_SIZE,
+    });
+    setItems(result.data);
+    setOriginNotice(result.origin === "FALLBACK" ? (result.notice ?? "") : null);
+    setMeta((result.meta as { total?: number; totalPages?: number }) ?? {});
+    setLoadedKey(queryKey);
+  }, [sourceCode, status, page, queryKey]);
 
   useEffect(() => {
-    const ref = { cancelled: false };
-    load(ref);
-    return () => {
-      ref.cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceId, status]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- `load` fetches, then sets state; the rule targets synchronous state sync, and an effect is where a client-rendered admin screen is meant to start a fetch.
+    void load();
+  }, [load]);
 
-  const visibleItems = useMemo(() => {
+  /** Manual refresh: drop the loaded marker so the spinner shows again. */
+  const refresh = () => {
+    setLoadedKey(null);
+    void load();
+  };
+
+  // Client-side only: the API paginates, so this narrows the page in hand
+  // rather than pretending to search the whole corpus.
+  const visible = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return items;
     return items.filter(
       (item) =>
         item.title.toLowerCase().includes(query) ||
-        item.externalId?.toLowerCase().includes(query) ||
-        item.contentSource.name.toLowerCase().includes(query)
+        item.contentSource.name.toLowerCase().includes(query) ||
+        (item.externalId ?? "").toLowerCase().includes(query)
     );
   }, [items, search]);
-
-  const handleCreateDraft = async (item: SourceItemSummary) => {
-    setBusy((b) => ({ ...b, [item.id]: true }));
-    const result = await createDraftFromSourceItem(item.id);
-    setActionNotice(`${item.title}: ${result.notice}`);
-    setBusy((b) => ({ ...b, [item.id]: false }));
-    if (result.accepted) load();
-  };
-
-  const handleIgnore = async (item: SourceItemSummary) => {
-    setBusy((b) => ({ ...b, [item.id]: true }));
-    const result = await ignoreSourceItem(item.id);
-    setActionNotice(`${item.title}: ${result.notice}`);
-    setBusy((b) => ({ ...b, [item.id]: false }));
-    if (result.accepted) load();
-  };
 
   return (
     <div className="space-y-6">
       <AdminPageHeader
         title="Source Items"
-        description="Every discovered government item: full-source status, AI assessment and the editorial bridge into an Article draft. Nothing here auto-publishes."
-        count={visibleItems.length}
+        description="Every document the ingestion engine has discovered, with its processing state, AI assessment and editorial routing. Items are never deleted; an ignored item keeps its evidence."
+        count={typeof meta.total === "number" ? meta.total : items.length}
         countLabel="items"
-        backHref="/admin/sources"
-        backLabel="Back to Automated Sources"
-      />
+      >
+        <button
+          onClick={refresh}
+          className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 text-slate-500 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+      </AdminPageHeader>
 
-      {origin === "FALLBACK" && !loading && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
-          <span className="rounded bg-amber-200/70 px-1.5 py-0.5 font-bold uppercase tracking-wider text-[10px]">
-            No live data
-          </span>
-          <span>Source items are unavailable until the ingestion API is running and has discovered content.</span>
-          {apiNotice && <span className="font-mono text-[11px] opacity-70">{apiNotice}</span>}
-        </div>
-      )}
+      {originNotice !== null && <OriginNotice notice={originNotice} />}
+      {notice && <NoticeBar notice={notice} onDismiss={() => setNotice(null)} />}
 
-      {actionNotice && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-blue-200/80 bg-blue-50 px-4 py-2.5 text-xs font-medium text-[#1769E0]">
-          <span>{actionNotice}</span>
-          <button
-            onClick={() => setActionNotice(null)}
-            className="text-[11px] font-semibold uppercase tracking-wider hover:underline cursor-pointer"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {PROCESSING_FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setStatus(f)}
-              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
-                status === f
-                  ? "bg-[#1769E0] text-white border-[#1769E0]"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-[#1769E0] hover:text-[#1769E0]"
-              }`}
+      <AdminTableContainer
+        count={visible.length}
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search this page by title, source or external id..."
+        filterComponent={
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={sourceCode}
+              onChange={(event) => {
+                setSourceCode(event.target.value);
+                setPage(1);
+              }}
+              className="h-8.5 cursor-pointer rounded-lg border border-slate-200 bg-slate-50/70 px-2 text-xs text-slate-700 focus:border-[#1769E0] focus:bg-white focus:outline-none"
             >
-              {f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
-            </button>
-          ))}
-        </div>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search title, external ID, source..."
-          className="h-8.5 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#1769E0] transition-colors min-w-[220px]"
-        />
-      </div>
-
-      {visibleItems.length === 0 ? (
-        <div className="bg-white border border-slate-200/80 rounded-xl">
+              <option value="">All sources</option>
+              {catalog.map((source) => (
+                <option key={source.code} value={source.code}>
+                  {source.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value as ProcessingStatus | "");
+                setPage(1);
+              }}
+              className="h-8.5 cursor-pointer rounded-lg border border-slate-200 bg-slate-50/70 px-2 text-xs text-slate-700 focus:border-[#1769E0] focus:bg-white focus:outline-none"
+            >
+              <option value="">All statuses</option>
+              {PROCESSING_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {value.replace(/_/g, " ").toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+        footerNote={
+          meta.totalPages
+            ? `Page ${page} of ${meta.totalPages} · ${meta.total} items total`
+            : `${visible.length} items on this page`
+        }
+      >
+        {visible.length === 0 ? (
           <AdminEmptyState
-            title={loading ? "Loading items..." : "No source items found"}
+            title={loading ? "Loading items…" : "No source items"}
             description={
               loading
-                ? "Fetching discovered content."
-                : "No item matches this filter yet. Items appear here once a source sync discovers content."
+                ? "Fetching the ingestion corpus."
+                : "Nothing matches this filter. Trigger a sync on a source to populate the corpus."
             }
-            icon={FileSearch}
+            icon={ListTree}
           />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-          {visibleItems.map((item) => {
-            const assessment = item.assessments[0];
-            const isBusy = Boolean(busy[item.id]);
-            const canDraft =
-              assessment?.routingDecision === "CREATE_DRAFT" &&
-              item.candidate &&
-              item.candidate.status !== "DRAFT_CREATED" &&
-              item.candidate.status !== "IGNORED";
-
-            return (
-              <div
-                key={item.id}
-                className="bg-white border border-slate-200/80 rounded-xl p-4 flex flex-col gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      <span>{item.contentSource.sourceType}</span>
-                      <span>·</span>
-                      <span className="truncate">{item.contentSource.name}</span>
-                    </div>
-                    <Link
-                      href={`/admin/source-items/${item.id}`}
-                      className="text-sm font-bold text-slate-900 hover:text-[#1769E0] transition-colors leading-snug line-clamp-2"
-                    >
-                      {item.title}
-                    </Link>
-                  </div>
-                  <a
-                    href={item.canonicalUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="View original source"
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-[#1769E0] hover:bg-blue-50 transition-colors shrink-0"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-                  <span>{formatDate(item.publishedAt)}</span>
-                  {item.externalId && (
-                    <>
-                      <span>·</span>
-                      <span className="font-mono truncate max-w-[160px]">{item.externalId}</span>
-                    </>
-                  )}
-                  {item.nativeTopics.slice(0, 3).map((topic) => (
-                    <span key={topic} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                      {topic}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <StatusBadge status={item.processingStatus} showDot={false} />
-                  {assessment && (
-                    <>
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-semibold ${
-                          ROUTING_STYLES[assessment.routingDecision] ?? ROUTING_STYLES.REVIEW
-                        }`}
+        ) : (
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-slate-200/80 bg-slate-50/75 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-4 py-3">Item</th>
+                <th className="px-3 py-3">Source</th>
+                <th className="px-3 py-3">Published</th>
+                <th className="px-3 py-3">Processing</th>
+                <th className="px-3 py-3">Route</th>
+                <th className="px-3 py-3">Relevance</th>
+                <th className="px-3 py-3">Candidate</th>
+                <th className="px-4 py-3 text-right">Inspect</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visible.map((item) => {
+                const assessment = item.assessments?.[0];
+                return (
+                  <tr key={item.id} className="group transition-colors hover:bg-slate-50/70">
+                    <td className="max-w-md px-4 py-3.5">
+                      <Link
+                        href={`/admin/source-items/${item.id}`}
+                        className="block truncate text-xs font-bold text-slate-900 transition-colors group-hover:text-[#1769E0] sm:text-sm"
                       >
-                        {ROUTING_LABELS[assessment.routingDecision] ?? assessment.routingDecision}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {Math.round(assessment.relevanceScore * 100)}% relevance ·{" "}
-                        {Math.round(assessment.confidenceScore * 100)}% confidence
-                      </span>
-                    </>
-                  )}
-                  {item.candidate && (
-                    <StatusBadge status={item.candidate.status} showDot={false} />
-                  )}
-                </div>
+                        {item.title}
+                      </Link>
+                      <div className="truncate font-mono text-[11px] text-slate-400">
+                        {item.externalId ?? item.canonicalUrl}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3.5 whitespace-nowrap">
+                      <Link
+                        href={`/admin/sources/${item.contentSource.code}`}
+                        className="font-semibold text-slate-700 hover:text-[#1769E0] hover:underline"
+                      >
+                        {item.contentSource.name}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-3.5 whitespace-nowrap text-slate-600">
+                      {formatRelative(item.publishedAt ?? item.discoveredAt)}
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <ProcessingBadge status={item.processingStatus} />
+                    </td>
+                    <td className="px-3 py-3.5">
+                      {assessment ? <RouteBadge lane={editorialLane(assessment)} /> : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-3 py-3.5 whitespace-nowrap font-mono tabular-nums text-slate-700">
+                      {assessment ? `${toScore(assessment.relevanceScore)}/100` : "—"}
+                    </td>
+                    <td className="px-3 py-3.5">
+                      {item.candidate ? (
+                        <CandidateBadge status={item.candidate.status} />
+                      ) : (
+                        <span className="text-[11px] text-slate-400">none</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link
+                          href={`/admin/source-items/${item.id}`}
+                          title="Inspect item, full source and AI assessment"
+                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-blue-50 hover:text-[#1769E0]"
+                        >
+                          <ListTree className="h-4 w-4" />
+                        </Link>
+                        <a
+                          href={item.canonicalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open the official source"
+                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-blue-50 hover:text-[#1769E0]"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </AdminTableContainer>
 
-                <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-slate-100 mt-auto">
-                  <Link
-                    href={`/admin/source-items/${item.id}`}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:text-[#1769E0] hover:border-[#1769E0] transition-colors"
-                  >
-                    View Assessment
-                  </Link>
-                  {canDraft && (
-                    <button
-                      onClick={() => void handleCreateDraft(item)}
-                      disabled={isBusy}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#1769E0] text-white hover:bg-[#1357bd] transition-colors disabled:opacity-50 cursor-pointer"
-                    >
-                      {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                      Create Draft
-                    </button>
-                  )}
-                  {item.candidate && item.candidate.status === "PENDING" && (
-                    <button
-                      onClick={() => void handleIgnore(item)}
-                      disabled={isBusy}
-                      title="Ignore"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50 cursor-pointer"
-                    >
-                      <XCircle className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {(meta.totalPages ?? 1) > 1 && (
+        <div className="flex items-center justify-between text-xs">
+          <button
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={page <= 1}
+            className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="text-slate-500">
+            Page {page} of {meta.totalPages}
+          </span>
+          <button
+            onClick={() => setPage((current) => current + 1)}
+            disabled={page >= (meta.totalPages ?? 1)}
+            className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next
+          </button>
         </div>
       )}
     </div>
