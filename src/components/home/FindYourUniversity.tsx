@@ -2,37 +2,39 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { universities } from "@/data/mock";
+import type { University } from "@/data/mock";
 import { SectionHeading } from "@/components/common/SectionHeading";
 import { SearchBar } from "@/components/common/SearchBar";
 import { UniversityCard } from "@/components/cards/UniversityCard";
 
-const uniFilters = {
-  Country: ["All", ...new Set(universities.map((u) => u.country))],
-  City: ["All", ...new Set(universities.map((u) => u.city))],
-  Course: ["All", ...new Set(universities.flatMap((u) => u.courses))],
-  Degree: ["All", "Bachelors", "Masters", "Both"],
-  Tuition: ["All", "Under 20,000", "20,000 – 40,000", "Over 40,000"],
-  Ranking: ["All", "Top 25", "Top 50", "Top 100"],
-  Intake: ["All", ...new Set(universities.map((u) => u.intake))],
-  Scholarships: ["All", "Available"],
-} as const;
+interface FindYourUniversityProps {
+  universities: University[];
+}
 
-type FilterKey = keyof typeof uniFilters;
+export function FindYourUniversity({ universities }: FindYourUniversityProps) {
+  const uniFilters = {
+    Country: ["All", ...new Set(universities.map((u) => u.country))],
+    City: ["All", ...new Set(universities.map((u) => u.city))],
+    Course: ["All", ...new Set(universities.flatMap((u) => u.courses))],
+    Degree: ["All", "Bachelors", "Masters", "Both"],
+    Tuition: ["All", "Under 20,000", "20,000 – 40,000", "Over 40,000"],
+    Ranking: ["All", "Top 25", "Top 50", "Top 100"],
+    Intake: ["All", ...new Set(universities.map((u) => u.intake))],
+    Scholarships: ["All", "Available"],
+  } as const;
 
-const defaultFilters: Record<FilterKey, string> = {
-  Country: "All",
-  City: "All",
-  Course: "All",
-  Degree: "All",
-  Tuition: "All",
-  Ranking: "All",
-  Intake: "All",
-  Scholarships: "All",
-};
+  type FilterKey = keyof typeof uniFilters;
 
-export function FindYourUniversity() {
-  const [query, setQuery] = useState("");
+  const defaultFilters: Record<FilterKey, string> = {
+    Country: "All",
+    City: "All",
+    Course: "All",
+    Degree: "All",
+    Tuition: "All",
+    Ranking: "All",
+    Intake: "All",
+    Scholarships: "All",
+  };  const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Record<FilterKey, string>>(defaultFilters);
 
   const results = useMemo(() => {

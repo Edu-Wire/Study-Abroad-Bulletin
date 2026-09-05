@@ -6,9 +6,12 @@ import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { BookmarkButton } from "@/components/common/BookmarkButton";
 import { CountryFlag } from "@/components/common/CountryFlag";
-import { universities, news } from "@/data/mock";
+import { getUniversities, getUniversity, toFrontendUniversity } from "@/lib/server/universities";
+import { getPublishedArticlesByCountry } from "@/lib/articles";
 import { AdSidebar } from "@/components/editorial/AdComponents";
 import { CompactNewsCard } from "@/components/cards/NewsCards";
+
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -16,25 +19,29 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const uni = universities.find((u) => u.id === slug);
-  if (!uni) return { title: "University not found" };
+  const apiUni = await getUniversity(slug);
+  if (!apiUni) return { title: "University not found" };
+  const uni = toFrontendUniversity(apiUni);
   return {
     title: `${uni.name} — Rankings, Tuition & Admissions`,
     description: `${uni.name} in ${uni.city}, ${uni.country}. World rank #${uni.ranking}. Tuition: ${uni.tuition}.`,
   };
 }
 
-export function generateStaticParams() {
-  return universities.map((u) => ({ slug: u.id }));
-}
-
 export default async function UniversityProfilePage({ params }: Props) {
   const { slug } = await params;
-  const uni = universities.find((u) => u.id === slug);
-  if (!uni) notFound();
+  const apiUni = await getUniversity(slug);
+  if (!apiUni) notFound();
+  const uni = toFrontendUniversity(apiUni);
 
-  const relatedNews = news.filter((a) => a.country === uni.country).slice(0, 3);
-
+  const [relatedNews, allApiUniversities] = await Promise.all([
+    getPublishedArticlesByCountry(apiUni.countryId, 3),
+    getUniversities(),
+  ]);
+  const otherUniversities = allApiUniversities
+    .map(toFrontendUniversity)
+    .filter((u) => u.id !== uni.id)
+    .slice(0, 5);
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 w-full max-w-full overflow-x-clip">
       <Header />
@@ -209,10 +216,7 @@ export default async function UniversityProfilePage({ params }: Props) {
                   </h3>
                 </div>
                 <div className="mt-4 divide-y divide-border min-w-0">
-                  {universities
-                    .filter((u) => u.id !== uni.id)
-                    .slice(0, 5)
-                    .map((u) => (
+                  {otherUniversities.map((u) => (
                       <Link
                         key={u.id}
                         href={`/universities/${u.id}`}

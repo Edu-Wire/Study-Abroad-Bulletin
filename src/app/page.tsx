@@ -19,6 +19,7 @@ import { LatestNews } from "@/components/home/LatestNews";
 import { FindYourUniversity } from "@/components/home/FindYourUniversity";
 import { AdBanner } from "@/components/editorial/AdComponents";
 import { getAllNews, getBreakingArticle } from "@/lib/articles";
+import { getUniversities, toFrontendUniversity } from "@/lib/server/universities";
 
 export const metadata: Metadata = {
   title: "Study Abroad Intelligence — Universities, Scholarships & Visa News",
@@ -44,10 +45,12 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   // Fetch once at the page level; pass as props to server components below.
-  const [articles, breakingArticle] = await Promise.all([
+  const [articles, breakingArticle, apiUniversities] = await Promise.all([
     getAllNews(),
     getBreakingArticle(),
+    getUniversities(),
   ]);
+  const universities = apiUniversities.map(toFrontendUniversity);
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 overflow-x-clip">
@@ -83,7 +86,7 @@ export default async function HomePage() {
         <ExploreDestinations />
 
         {/* University discovery */}
-        <FindYourUniversity />
+        <FindYourUniversity universities={universities} />
 
         {/* Ad between universities and scholarships */}
         <div className="border-b border-border bg-surface">

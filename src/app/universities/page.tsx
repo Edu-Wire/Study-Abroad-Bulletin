@@ -4,6 +4,9 @@ import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { FindYourUniversity } from "@/components/home/FindYourUniversity";
 import { AdBanner } from "@/components/editorial/AdComponents";
+import { getUniversities, toFrontendUniversity } from "@/lib/server/universities";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Universities — Search & Compare Global Universities",
@@ -11,7 +14,9 @@ export const metadata: Metadata = {
     "Search and compare universities worldwide by country, course, ranking and tuition. Find your perfect university match.",
 };
 
-export default function UniversitiesPage() {
+export default async function UniversitiesPage() {
+  const universities = (await getUniversities()).map(toFrontendUniversity);
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 w-full max-w-full overflow-x-clip">
       <Header />
@@ -38,7 +43,7 @@ export default function UniversitiesPage() {
         </div>
 
         {/* University discovery with filters */}
-        <FindYourUniversity />
+        <FindYourUniversity universities={universities} />
       </main>
       <Footer />
       <MobileBottomNav />
