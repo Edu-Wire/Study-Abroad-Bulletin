@@ -29,6 +29,7 @@ export type University = {
   name: string;
   initials: string;
   countryId: string;
+  country: CountrySummary;
   city: string;
   ranking: number;
   tuition: string;
@@ -45,10 +46,6 @@ export type UniversitySummary = Pick<
   "id" | "slug" | "name" | "initials" | "countryId"
 >;
 
-export type ScholarshipDestination = {
-  countryId: string;
-  country: CountrySummary;
-};
 
 /** Public API DTO aligned with the Prisma Scholarship scalar fields. */
 export type Scholarship = {
@@ -64,7 +61,7 @@ export type Scholarship = {
   type: ScholarshipType;
   universityId: string | null;
   university: UniversitySummary | null;
-  destinations: ScholarshipDestination[];
+  destinations: CountrySummary[];
 };
 
 /** Derived presentation field; never persisted in Prisma. */

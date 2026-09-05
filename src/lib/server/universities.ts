@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { University } from "@/contracts/api";
+import type { University as FrontendUniversity } from "@/data/mock";
 import { getBackendUrl, getBffSharedSecret } from "./backendConfig";
 
 const SERVICE_READER_HEADER = "x-bff-service-reader";
@@ -58,4 +59,23 @@ export async function getUniversity(slug: string): Promise<University | null> {
     console.error(`[universities] failed to load university ${slug}:`, error);
     return null;
   }
+}
+
+/** Maps the API DTO to the shape UniversityCard/FindYourUniversity already expect. */
+export function toFrontendUniversity(u: University): FrontendUniversity {
+  return {
+    id: u.slug,
+    name: u.name,
+    initials: u.initials,
+    country: u.country.name,
+    city: u.city,
+    ranking: u.ranking,
+    tuition: u.tuition,
+    tuitionValue: u.tuitionValue,
+    courses: u.courses,
+    scholarships: u.scholarships,
+    intake: u.intake,
+    degree: (u.degree === "Bachelors" || u.degree === "Masters" ? u.degree : "Both"),
+    ielts: u.ielts,
+  };
 }
