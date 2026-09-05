@@ -3,10 +3,10 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import {
   images,
-  countries,
   deadlines,
 } from "@/data/mock";
 import type { Guide, NewsArticle, Scholarship, VisaUpdate } from "@/data/mock";
+import type { Country } from "@/contracts/api";
 import { SectionHeading } from "@/components/common/SectionHeading";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import {
@@ -33,11 +33,18 @@ function getEditionDate(): string {
     .toUpperCase();
 }
 
-interface HeroProps {
-  articles: NewsArticle[];
+interface HeroStats {
+  universities: number;
+  scholarships: number;
+  updatesThisWeek: number;
 }
 
-export function Hero({ articles }: HeroProps) {
+interface HeroProps {
+  articles: NewsArticle[];
+  stats: HeroStats;
+}
+
+export function Hero({ articles, stats }: HeroProps) {
   const [lead, second, third, fourth, fifth] = articles;
   if (!lead) return null;
   const editionDate = getEditionDate();
@@ -111,9 +118,9 @@ export function Hero({ articles }: HeroProps) {
             {/* Stats strip — three columns with thin vertical dividers */}
             <div className="mt-0 grid grid-cols-3 border-t border-border min-w-0">
               {[
-                { value: "1,240", label: "Universities" },
-                { value: "860", label: "Scholarships" },
-                { value: "120+", label: "Updates / wk" },
+                { value: stats.universities.toLocaleString("en-US"), label: "Universities" },
+                { value: stats.scholarships.toLocaleString("en-US"), label: "Scholarships" },
+                { value: `${stats.updatesThisWeek}`, label: "Updates / wk" },
               ].map(({ value, label }, i) => (
                 <div
                   key={label}
@@ -330,7 +337,13 @@ export function TodaysBriefing({ articles }: TodaysBriefingProps) {
 
 // ─── EXPLORE DESTINATIONS ────────────────────────────────────────────────────
 
-export function ExploreDestinations() {
+type ExploreDestination = Country & { universities: number; updates: number };
+
+interface ExploreDestinationsProps {
+  countries: ExploreDestination[];
+}
+
+export function ExploreDestinations({ countries }: ExploreDestinationsProps) {
   return (
     <section className="border-b border-border bg-background">
       <div className="shell py-7 lg:py-12 min-w-0">
@@ -370,7 +383,7 @@ export function ExploreDestinations() {
                       <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors leading-none truncate">
                         {country.name}
                       </p>
-                      <p className="eyebrow text-muted-foreground mt-0.5">{country.universities} universities</p>
+                      <p className="eyebrow text-muted-foreground mt-0.5">{country.universitiesCount} universities</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0 ml-2">

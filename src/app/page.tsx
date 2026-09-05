@@ -18,9 +18,10 @@ import {
 import { LatestNews } from "@/components/home/LatestNews";
 import { FindYourUniversity } from "@/components/home/FindYourUniversity";
 import { AdBanner } from "@/components/editorial/AdComponents";
-import { getAllNews, getBreakingArticle, getPublishedGuides, getPublishedVisaUpdates } from "@/lib/articles";
+import { getAllNews, getBreakingArticle, getPublishedGuides, getPublishedVisaUpdates, getRecentArticleCount } from "@/lib/articles";
 import { getUniversities, toFrontendUniversity } from "@/lib/server/universities";
 import { getScholarships, toFrontendScholarship } from "@/lib/server/scholarships";
+import { getCountries } from "@/lib/server/countries";
 
 export const metadata: Metadata = {
   title: "Study Abroad Intelligence — Universities, Scholarships & Visa News",
@@ -46,16 +47,29 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   // Fetch once at the page level; pass as props to server components below.
-  const [articles, breakingArticle, apiUniversities, apiScholarships, visaUpdates, guides] = await Promise.all([
+  const [articles, breakingArticle, apiUniversities, apiScholarships, visaUpdates, guides, apiCountries, updatesThisWeek] = await Promise.all([
     getAllNews(),
     getBreakingArticle(),
     getUniversities(),
     getScholarships(),
     getPublishedVisaUpdates(),
     getPublishedGuides(7),
+    getCountries(),
+    getRecentArticleCount(7),
   ]);
   const universities = apiUniversities.map(toFrontendUniversity);
   const scholarships = apiScholarships.map(toFrontendScholarship);
+  const countries = apiCountries.map((c) => ({
+    ...c,
+    universities: c.universitiesCount,
+    updates: c.updatesCount,
+  }));
+
+  const heroStats = {
+    universities: universities.length,
+    scholarships: scholarships.length,
+    updatesThisWeek,
+  };
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 overflow-x-clip">
@@ -72,7 +86,7 @@ export default async function HomePage() {
         </div>
 
         {/* Front page hero — newspaper style, uses DB articles */}
-        <Hero articles={articles} />
+        <Hero articles={articles} stats={heroStats} />
 
         {/* Today's Briefing — uses DB articles */}
         <TodaysBriefing articles={articles} />
@@ -88,7 +102,7 @@ export default async function HomePage() {
         <LatestNews articles={articles} />
 
         {/* Explore Destinations */}
-        <ExploreDestinations />
+        <ExploreDestinations countries={countries} />
 
         {/* University discovery */}
         <FindYourUniversity universities={universities} />

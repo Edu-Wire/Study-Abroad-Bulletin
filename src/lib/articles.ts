@@ -343,6 +343,18 @@ export async function getGuideBySlug(slug: string): Promise<GuideDetail | null> 
     return null;
   }
 }
+/** Returns the number of PUBLISHED articles created within the requested window. */
+export async function getRecentArticleCount(days: number): Promise<number> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  try {
+    return await prisma.article.count({
+      where: { status: "PUBLISHED", publishedAt: { gte: since } },
+    });
+  } catch (error) {
+    console.error("[articles.ts] ❌ Failed to count recent articles from PostgreSQL:", error);
+    return 0;
+  }
+}
 // ---------------------------------------------------------------------------
 // Admin preview fetcher — returns any status article with full raw fields
 // ---------------------------------------------------------------------------
