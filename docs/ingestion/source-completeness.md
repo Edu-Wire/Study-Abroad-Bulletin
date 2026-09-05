@@ -23,28 +23,28 @@ the Admin source page for that.
 | `uk-govuk-search-api`<br>GOV.UK Search API (UKVI / Home Office discovery) | UK | JSON_API | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `uk-govuk-content-api`<br>Immigration Rules: Statements of Changes (Content API) | UK | JSON_API | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `uk-immigration-rules-watch`<br>Student / Graduate / sponsor guidance watch | UK | CHANGE_WATCH | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `au-study-australia-news`<br>Study Australia News | AU | WEB_LISTING | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `au-education-newsroom-rss`<br>Department of Education Newsroom (RSS) | AU | RSS_ATOM | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `au-homeaffairs-subclass500-watch`<br>Home Affairs Subclass 500 Student visa watch | AU | CHANGE_WATCH | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `au-study-australia-news`<br>Study Australia News | AU | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `au-education-newsroom-rss`<br>Department of Education Newsroom (RSS) | AU | RSS_ATOM | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `au-homeaffairs-subclass500-watch`<br>Home Affairs Subclass 500 Student visa watch | AU | CHANGE_WATCH | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `au-education-monthly-data`<br>International Student monthly summary and data tables | AU | DATA_FILE | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `us-uscis-news-rss`<br>USCIS All News | US | RSS_ATOM | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `us-uscis-alerts`<br>USCIS Alerts | US | WEB_LISTING | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `us-state-visas-news`<br>Department of State - U.S. Visas News | US | WEB_LISTING | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `us-state-study-exchange-watch`<br>State Department Study & Exchange (F/M/J) watch | US | CHANGE_WATCH | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `us-ice-sevp-watch`<br>ICE / SEVP student guidance watch | US | CHANGE_WATCH | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `de-ffo-news-rss`<br>Federal Foreign Office - current articles (RSS) | DE | RSS_ATOM | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `de-ffo-press-releases-rss`<br>Federal Foreign Office - press releases and speeches (RSS) | DE | RSS_ATOM | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `de-make-it-in-germany-watch`<br>Make it in Germany - Visa for studying watch | DE | CHANGE_WATCH | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `de-daad-news`<br>DAAD press, news and scholarship items | DE | WEB_LISTING | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `us-uscis-news-rss`<br>USCIS All News | US | RSS_ATOM | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `us-uscis-alerts`<br>USCIS Alerts | US | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `us-state-visas-news`<br>Department of State - U.S. Visas News | US | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `us-state-study-exchange-watch`<br>State Department Study & Exchange (F/M/J) watch | US | CHANGE_WATCH | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `us-ice-sevp-watch`<br>ICE / SEVP student guidance watch | US | CHANGE_WATCH | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `de-ffo-news-rss`<br>Federal Foreign Office - current articles (RSS) | DE | RSS_ATOM | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `de-ffo-press-releases-rss`<br>Federal Foreign Office - press releases and speeches (RSS) | DE | RSS_ATOM | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `de-make-it-in-germany-watch`<br>Make it in Germany - Visa for studying watch | DE | CHANGE_WATCH | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `de-daad-news`<br>DAAD press, news and scholarship items | DE | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `nz-immigration-news`<br>Immigration New Zealand News Centre | NZ | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `nz-pathway-student-watch`<br>Pathway Student Visa & post-study work guidance watch | NZ | CHANGE_WATCH | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `ie-isd-news-updates`<br>Immigration Service Delivery - News and Updates | IE | WEB_LISTING | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `ie-student-permission-watch`<br>ISD Student Permission / Stamp 2 rules watch | IE | CHANGE_WATCH | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `nz-pathway-student-watch`<br>Pathway Student Visa & post-study work guidance watch | NZ | CHANGE_WATCH | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `ie-isd-news-updates`<br>Immigration Service Delivery - News and Updates | IE | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `ie-student-permission-watch`<br>ISD Student Permission / Stamp 2 rules watch | IE | CHANGE_WATCH | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `eu-press-corner-api`<br>European Commission Press Corner (Search + Document API) | EU | JSON_API | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `eu-commission-dept-news`<br>European Commission Department News | EU | RSS_ATOM | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `eu-dg-home-news`<br>DG Migration and Home Affairs - News | EU | WEB_LISTING | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `eu-education-area-news`<br>European Education Area - News | EU | WEB_LISTING | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `eu-erasmus-plus-news`<br>Erasmus+ News / Erasmus Mundus | EU | WEB_LISTING | no | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `eu-commission-dept-news`<br>European Commission Department News | EU | RSS_ATOM | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `eu-dg-home-news`<br>DG Migration and Home Affairs - News | EU | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `eu-education-area-news`<br>European Education Area - News | EU | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `eu-erasmus-plus-news`<br>Erasmus+ News / Erasmus Mundus | EU | WEB_LISTING | yes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Per-source detail
 
