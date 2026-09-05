@@ -8,7 +8,9 @@ import { SectionHeading } from "@/components/common/SectionHeading";
 import { ScholarshipCard } from "@/components/cards/ScholarshipCard";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner, AdSidebar } from "@/components/editorial/AdComponents";
-import { scholarships } from "@/data/mock";
+import { getScholarships, toFrontendScholarship } from "@/lib/server/scholarships";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Scholarships — Fully Funded & Partial Awards for International Students",
@@ -16,7 +18,8 @@ export const metadata: Metadata = {
     "Discover scholarships for international students. Browse fully funded, partial, and tuition waiver awards by country and degree level.",
 };
 
-export default function ScholarshipsPage() {
+export default async function ScholarshipsPage() {
+  const scholarships = (await getScholarships()).map(toFrontendScholarship);
   const closingSoon = scholarships
     .filter((s) => s.daysLeft <= 14)
     .sort((a, b) => a.daysLeft - b.daysLeft);

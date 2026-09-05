@@ -4,12 +4,11 @@ import { ArrowRight } from "lucide-react";
 import {
   images,
   countries,
-  scholarships,
   visaUpdates,
   guides,
   deadlines,
 } from "@/data/mock";
-import type { NewsArticle } from "@/data/mock";
+import type { NewsArticle, Scholarship } from "@/data/mock";
 import { SectionHeading } from "@/components/common/SectionHeading";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import {
@@ -398,7 +397,11 @@ export function ExploreDestinations() {
 
 // ─── SCHOLARSHIP SPOTLIGHT ────────────────────────────────────────────────────
 
-export function ScholarshipSpotlight() {
+interface ScholarshipSpotlightProps {
+  scholarships: Scholarship[];
+}
+
+export function ScholarshipSpotlight({ scholarships }: ScholarshipSpotlightProps) {
   const closingSoon = scholarships
     .filter((s) => s.daysLeft <= 14)
     .sort((a, b) => a.daysLeft - b.daysLeft);
