@@ -51,6 +51,8 @@ import ingestionRoutes from "./modules/ingestion/ingestion.routes.js";
 import { canonicalizeUrl } from "./modules/ingestion/utils/urlCanonicalizer.js";
 import editorialRoutes from "./modules/ingestion/editorial.routes.js";
 
+import { createScholarshipsRouter } from "./modules/scholarships/scholarships.routes.js";
+
 const app = express();
 const PORT = process.env.PORT || 8000;
 
@@ -91,6 +93,7 @@ app.use("/api", generalApiLimiter);
 // before delegating to the operational router that enqueues the job.
 app.use("/api/admin", editorialRoutes);
 app.use("/api/admin", ingestionRoutes);
+app.use("/api/scholarships", createScholarshipsRouter());
 
 // Cookie configuration for opaque session tokens.
 export const AUTH_COOKIE_OPTIONS = {
