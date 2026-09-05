@@ -50,8 +50,12 @@ import { getPersonalizedRecommendations } from "./services/recommendation.js";
 import ingestionRoutes from "./modules/ingestion/ingestion.routes.js";
 import { canonicalizeUrl } from "./modules/ingestion/utils/urlCanonicalizer.js";
 import editorialRoutes from "./modules/ingestion/editorial.routes.js";
-
-import { createScholarshipsRouter } from "./modules/scholarships/scholarships.routes.js";
+import { createUniversitiesRouter, createAdminUniversitiesRouter } from "./modules/universities/universities.routes.js";
+import { createCountriesRouter } from "./modules/countries/countries.routes.js";
+import { createAdminCountriesRouter } from "./modules/countries/countries.admin.routes.js";
+import { createScholarshipsRouter, createAdminScholarshipsRouter } from "./modules/scholarships/scholarships.routes.js";
+import { createAdminDeadlinesRouter } from "./modules/deadlines/deadlines.routes.js";
+import { createAdminSettingsRouter } from "./modules/settings/settings.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -93,7 +97,18 @@ app.use("/api", generalApiLimiter);
 // before delegating to the operational router that enqueues the job.
 app.use("/api/admin", editorialRoutes);
 app.use("/api/admin", ingestionRoutes);
+
+// Universities & Countries: public directory routes plus admin CRUD.
+// Countries' public router is mounted under /public to avoid colliding with
+// the pre-existing bare GET /api/countries dropdown route below.
+app.use("/api/universities", createUniversitiesRouter());
+app.use("/api/admin/universities", createAdminUniversitiesRouter());
+app.use("/api/countries/public", createCountriesRouter());
+app.use("/api/admin/countries", createAdminCountriesRouter());
 app.use("/api/scholarships", createScholarshipsRouter());
+app.use("/api/admin/scholarships", createAdminScholarshipsRouter());
+app.use("/api/admin/deadlines", createAdminDeadlinesRouter());
+app.use("/api/admin/settings", createAdminSettingsRouter());
 
 // Cookie configuration for opaque session tokens.
 export const AUTH_COOKIE_OPTIONS = {
@@ -942,7 +957,7 @@ app.post(
         return res.status(400).json({ success: false, message: "Category is required." });
       }
 
-      const validCategories = ["UNIVERSITIES", "ADMISSIONS", "SCHOLARSHIPS", "VISA", "STUDENT_LIFE", "CAREER"];
+      const validCategories = ["UNIVERSITIES", "ADMISSIONS", "SCHOLARSHIPS", "VISA", "STUDENT_LIFE", "CAREER", "GUIDES"];
       if (!validCategories.includes(category)) {
         return res.status(400).json({ success: false, message: "Invalid category value." });
       }

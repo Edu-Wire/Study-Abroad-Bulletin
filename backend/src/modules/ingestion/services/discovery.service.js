@@ -5,6 +5,46 @@ import { getSource } from "../config/sourceRegistry.ts";
 import { createHttpFetcher } from "../utils/httpClient.js";
 import { parseSafeXml } from "../utils/safeXmlParser.js";
 import { canonicalizeUrl, hashCanonicalUrl } from "../utils/urlCanonicalizer.js";
+import { hashContent } from "../utils/contentHasher.js";
+
+/**
+ * Processing statuses that mean "never successfully went through detail yet" -
+ * an item still in one of these should always get a detail job, regardless of
+ * whether its discovery-level fields happen to match last time (e.g. a prior
+ * attempt failed before a version was ever recorded).
+ */
+const PRE_DETAIL_STATUSES = new Set(["DISCOVERED", "DETAIL_PENDING"]);
+
+/**
+ * Fingerprint of the cheap fields discovery already has in hand, without an
+ * extra fetch. Only meaningful for sources whose discovery payload actually
+ * reflects the page's real content (RSS/API/WEB/DATA) - a CHANGE_WATCH
+ * source's discovery is static config (the same title/URL every run), so this
+ * would hash to the same value forever and can never be used to decide
+ * whether to re-check the page; that source family relies on detail.service's
+ * own content hash of the fetched page instead.
+ */
+export function computeDiscoveryHash(title, summary, publishedAt) {
+  return hashContent(`${title}\n${summary || ""}\n${publishedAt ? publishedAt.toISOString() : ""}`);
+}
+
+/**
+ * Whether an already-known item can skip re-enqueueing the detail fetch this
+ * discovery run. Shared by both upsert branches below (externalId lookup and
+ * canonicalUrlHash fallback) so the rule only lives in one place.
+ *
+ * @param {object} params
+ * @param {boolean} params.isWatchSource
+ * @param {string|null} params.existingHash
+ * @param {string} params.newHash
+ * @param {string} params.existingStatus
+ * @returns {boolean}
+ */
+export function shouldSkipDetail({ isWatchSource, existingHash, newHash, existingStatus }) {
+  if (isWatchSource) return false;
+  if (existingHash !== newHash) return false;
+  return !PRE_DETAIL_STATUSES.has(existingStatus);
+}
 
 /**
  * Executes discovery for a ContentSource, upserting discovered items and enqueueing detail extraction.
@@ -96,6 +136,7 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
     const discoveryPage = await adapter.discover(discoverContext);
     const discoveredItems = discoveryPage?.items || [];
     itemsFound = discoveredItems.length;
+    const isWatchSource = sourceConfig.transport === "WATCH";
 
     for (const item of discoveredItems) {
       try {
@@ -110,8 +151,10 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
         const publishedAt = item.publishedAt ? new Date(item.publishedAt) : null;
         const summary = item.sourceSummary || item.summary || null;
         const nativeTopics = item.sourceTopics || item.nativeTopics || [];
+        const discoveryHash = computeDiscoveryHash(item.title, summary, publishedAt);
 
         let sourceItem = null;
+        let skipDetail = false;
 
         if (externalId) {
           // Unique lookup on (contentSourceId, externalId)
@@ -125,6 +168,13 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
           });
 
           if (existing) {
+            skipDetail = shouldSkipDetail({
+              isWatchSource,
+              existingHash: existing.discoveryHash,
+              newHash: discoveryHash,
+              existingStatus: existing.processingStatus,
+            });
+
             sourceItem = await prisma.sourceItem.update({
               where: { id: existing.id },
               data: {
@@ -136,6 +186,7 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
                 language: item.language || existing.language || "en",
                 nativeTopics: nativeTopics.length > 0 ? nativeTopics : existing.nativeTopics,
                 rawMetadata: item.discoveryRaw || item.rawMetadata || item,
+                discoveryHash,
               },
             });
             itemsUpdated++;
@@ -154,6 +205,7 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
                 nativeTopics,
                 rawMetadata: item.discoveryRaw || item.rawMetadata || item,
                 processingStatus: "DETAIL_PENDING",
+                discoveryHash,
               },
             });
             itemsCreated++;
@@ -170,6 +222,13 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
           });
 
           if (existing) {
+            skipDetail = shouldSkipDetail({
+              isWatchSource,
+              existingHash: existing.discoveryHash,
+              newHash: discoveryHash,
+              existingStatus: existing.processingStatus,
+            });
+
             sourceItem = await prisma.sourceItem.update({
               where: { id: existing.id },
               data: {
@@ -179,6 +238,7 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
                 language: item.language || existing.language || "en",
                 nativeTopics: nativeTopics.length > 0 ? nativeTopics : existing.nativeTopics,
                 rawMetadata: item.discoveryRaw || item.rawMetadata || item,
+                discoveryHash,
               },
             });
             itemsUpdated++;
@@ -197,18 +257,26 @@ export async function processDiscovery({ contentSourceId, runType = "LIVE", runI
                 nativeTopics,
                 rawMetadata: item.discoveryRaw || item.rawMetadata || item,
                 processingStatus: "DETAIL_PENDING",
+                discoveryHash,
               },
             });
             itemsCreated++;
           }
         }
 
-        // Enqueue detail job for item enrichment
-        if (sourceItem) {
+        // Enqueue detail job for item enrichment - unless discovery's own cheap
+        // fingerprint already matches what we saw last time (see skipDetail
+        // above), in which case there is nothing new to fetch or classify.
+        if (sourceItem && !skipDetail) {
           await enqueueJob(JobNames.SOURCE_DETAIL, {
             sourceItemId: sourceItem.id,
             contentSourceId: contentSource.id,
             url: sourceItem.canonicalUrl,
+          });
+        } else if (sourceItem) {
+          discoverContext.logger.debug("Discovery fingerprint unchanged, skipping detail fetch", {
+            source: sourceConfig.code,
+            sourceItemId: sourceItem.id,
           });
         }
       } catch (itemErr) {

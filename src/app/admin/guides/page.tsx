@@ -1,43 +1,110 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { BookOpen, Eye, Edit3, Trash2, X, Sparkles } from "lucide-react";
+import { BookOpen, Eye, Edit3, Trash2, Loader2 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer, AdminEmptyState } from "@/components/admin/AdminTable";
 import { StatusBadge } from "@/components/admin/StatusBadge";
-import { guides } from "@/data/mock";
+import { ArticleFormModal } from "@/components/admin/ArticleFormModal";
+import { adminGet, adminDelete } from "@/lib/api/apiClient";
+
+interface Country {
+  id: string;
+  name: string;
+  flag: string;
+}
+
+interface GuideArticle {
+  id: string;
+  slug: string;
+  headline: string;
+  summary: string;
+  content: string | null;
+  category: string;
+  image: string | null;
+  readingTime: string;
+  breaking: boolean;
+  featured: boolean;
+  status: string;
+  primaryCountry: Country | null;
+  countries: { country: Country }[];
+}
 
 export default function AdminGuidesPage() {
+  const [articles, setArticles] = useState<GuideArticle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [modal, setModal] = useState<
+    { mode: "create" } | { mode: "edit"; article: GuideArticle } | null
+  >(null);
 
-  const filteredGuides = guides.filter(
-    (g) =>
-      g.title.toLowerCase().includes(search.toLowerCase()) ||
-      g.category.toLowerCase().includes(search.toLowerCase()) ||
-      g.description.toLowerCase().includes(search.toLowerCase())
+  const load = useCallback(() => {
+    setLoading(true);
+    adminGet<{ success: boolean; articles: GuideArticle[] }>(
+      "/admin/articles?category=GUIDES&limit=100"
+    )
+      .then((d) => {
+        if (d.success) setArticles(d.articles);
+      })
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed to load guides.")
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
+    load();
+  }, [load]);
+
+  const handleDelete = async (article: GuideArticle) => {
+    if (!confirm(`Delete "${article.headline}"? This cannot be undone.`)) return;
+    try {
+      await adminDelete(`/admin/articles/${article.id}`);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete guide.");
+    }
+  };
+
+  const filteredArticles = articles.filter(
+    (a) =>
+      a.headline.toLowerCase().includes(search.toLowerCase()) ||
+      a.summary.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
       <AdminPageHeader
         title="Editorial Guides"
-        description="Author, publish, and manage in-depth student resources, SOP frameworks, IELTS strategies, and destination walkthroughs."
-        count={guides.length}
+        description="Author, publish, and manage in-depth student resources, SOP frameworks, IELTS strategies, and destination walkthroughs. Backed by the same editorial article system as the newsroom."
+        count={articles.length}
         countLabel="guides"
         addLabel="Add Guide"
-        onAdd={() => setActionNotice("Create Editorial Guide")}
+        onAdd={() => setModal({ mode: "create" })}
       />
 
+      {error && (
+        <div className="p-3 rounded-lg bg-rose-50 text-rose-800 border border-rose-200/80 text-xs font-medium">
+          {error}
+        </div>
+      )}
+
       <AdminTableContainer
-        count={filteredGuides.length}
+        count={filteredArticles.length}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search guide titles, categories, keywords..."
-        footerNote={`Displaying ${filteredGuides.length} of ${guides.length} editorial guides`}
+        searchPlaceholder="Search guide titles, keywords..."
+        footerNote={`Displaying ${filteredArticles.length} of ${articles.length} editorial guides`}
       >
-        {filteredGuides.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-slate-400 text-xs">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading guides...
+          </div>
+        ) : filteredArticles.length === 0 ? (
           <AdminEmptyState
             title="No guides found"
             description="No editorial guides matched your search keywords."
@@ -48,36 +115,30 @@ export default function AdminGuidesPage() {
             <thead>
               <tr className="bg-slate-50/75 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-4">Title & Overview</th>
-                <th className="py-3 px-3">Category</th>
                 <th className="py-3 px-3">Reading Time</th>
                 <th className="py-3 px-3">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredGuides.map((g) => (
+              {filteredArticles.map((g) => (
                 <tr
                   key={g.id}
                   className="hover:bg-slate-50/70 transition-colors group"
                 >
                   <td className="py-3.5 px-4 font-semibold text-slate-900 max-w-md">
                     <div className="group-hover:text-[#1769E0] transition-colors font-bold text-xs sm:text-sm">
-                      {g.title}
+                      {g.headline}
                     </div>
                     <div className="text-[11px] text-slate-500 line-clamp-1 font-normal mt-0.5">
-                      {g.description}
+                      {g.summary}
                     </div>
-                  </td>
-                  <td className="py-3.5 px-3 whitespace-nowrap">
-                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-[#1769E0] border border-blue-200/80">
-                      {g.category}
-                    </span>
                   </td>
                   <td className="py-3.5 px-3 text-slate-500 whitespace-nowrap text-[11px]">
                     {g.readingTime}
                   </td>
                   <td className="py-3.5 px-3 whitespace-nowrap">
-                    <StatusBadge status="PUBLISHED" size="sm" />
+                    <StatusBadge status={g.status} size="sm" />
                   </td>
                   <td className="py-3.5 px-4 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1">
@@ -90,14 +151,14 @@ export default function AdminGuidesPage() {
                         <Eye className="h-3.5 w-3.5" />
                       </Link>
                       <button
-                        onClick={() => setActionNotice(`Edit Guide: ${g.title}`)}
+                        onClick={() => setModal({ mode: "edit", article: g })}
                         className="p-1.5 text-slate-500 hover:text-[#1769E0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                         title="Edit Guide"
                       >
                         <Edit3 className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        onClick={() => setActionNotice(`Delete Guide: ${g.title}`)}
+                        onClick={() => handleDelete(g)}
                         className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                         title="Delete Guide"
                       >
@@ -112,42 +173,30 @@ export default function AdminGuidesPage() {
         )}
       </AdminTableContainer>
 
-      {/* Action Notice Modal */}
-      {actionNotice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#071A33]/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 p-6 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-50 text-[#1769E0] border border-blue-100 flex items-center justify-center shrink-0">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">{actionNotice}</h3>
-                  <p className="text-xs text-slate-500">Editorial Guide Editor</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setActionNotice(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 leading-relaxed">
-              Markdown editor integration and resource publishing are configured in the editorial suite.
-            </div>
-
-            <div className="mt-5 flex justify-end">
-              <button
-                onClick={() => setActionNotice(null)}
-                className="px-4 py-2 text-xs font-semibold text-white bg-[#1769E0] hover:bg-[#1357bd] rounded-lg transition-colors cursor-pointer shadow-2xs"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+      {modal && (
+        <ArticleFormModal
+          mode={modal.mode}
+          initialData={
+            modal.mode === "edit"
+              ? {
+                  ...modal.article,
+                  category: "GUIDES",
+                  content: modal.article.content ?? "",
+                  image: modal.article.image ?? "",
+                  status: modal.article.status as
+                    | "DRAFT"
+                    | "PENDING_REVIEW"
+                    | "PUBLISHED"
+                    | "ARCHIVED"
+                    | "REJECTED",
+                  primaryCountryId: modal.article.primaryCountry?.id ?? "",
+                  countryIds: modal.article.countries.map((c) => c.country.id),
+                }
+              : { category: "GUIDES" }
+          }
+          onClose={() => setModal(null)}
+          onSuccess={load}
+        />
       )}
     </div>
   );

@@ -54,3 +54,38 @@ export async function findPublicUniversityBySlug(slug) {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Admin CRUD - same select shape as the public list; the admin table needs
+// every field the public directory does, plus none it doesn't.
+// ---------------------------------------------------------------------------
+
+export async function listAdminUniversities() {
+  return prisma.university.findMany({
+    select: universitySelect,
+    orderBy: [{ ranking: "asc" }, { name: "asc" }],
+  });
+}
+
+export async function findAdminUniversityById(id) {
+  return prisma.university.findUnique({ where: { id }, select: universitySelect });
+}
+
+export async function findUniversityBySlugExcludingId(slug, excludeId) {
+  return prisma.university.findFirst({
+    where: excludeId ? { slug, NOT: { id: excludeId } } : { slug },
+    select: { id: true },
+  });
+}
+
+export async function createUniversity(data) {
+  return prisma.university.create({ data, select: universitySelect });
+}
+
+export async function updateUniversity(id, data) {
+  return prisma.university.update({ where: { id }, data, select: universitySelect });
+}
+
+export async function deleteUniversity(id) {
+  return prisma.university.delete({ where: { id } });
+}

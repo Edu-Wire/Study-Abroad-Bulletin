@@ -5,7 +5,7 @@ import { X, Loader2, CheckCircle2, AlertCircle, FileEdit, Globe } from "lucide-r
 import { adminGet, adminPost, adminPut } from "@/lib/api/apiClient";
 
 type ArticleStatus = "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
-type ArticleCategory = "UNIVERSITIES" | "ADMISSIONS" | "SCHOLARSHIPS" | "VISA" | "STUDENT_LIFE" | "CAREER";
+type ArticleCategory = "UNIVERSITIES" | "ADMISSIONS" | "SCHOLARSHIPS" | "VISA" | "STUDENT_LIFE" | "CAREER" | "GUIDES";
 
 interface Country {
   id: string;
@@ -43,6 +43,7 @@ const CATEGORIES: { value: ArticleCategory; label: string }[] = [
   { value: "SCHOLARSHIPS", label: "Scholarships" },
   { value: "STUDENT_LIFE", label: "Student Life" },
   { value: "CAREER", label: "Career" },
+  { value: "GUIDES", label: "Editorial Guide" },
 ];
 
 const STATUSES: { value: ArticleStatus; label: string }[] = [

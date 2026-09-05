@@ -79,3 +79,39 @@ export async function getPublicCountry(id, repository = countryRepository, now =
   const country = await repository.findPublicCountryById(id);
   return country ? toPublicCountryDetail(country, now) : null;
 }
+
+// ---------------------------------------------------------------------------
+// Admin CRUD
+// ---------------------------------------------------------------------------
+
+export async function listCountriesForAdmin(repository = countryRepository) {
+  return repository.listAdminCountries();
+}
+
+export async function getCountryForAdmin(id, repository = countryRepository) {
+  return repository.findAdminCountryById(id);
+}
+
+/** Throws a plain Error with a `.code` of "NAME_TAKEN" if the name collides. */
+async function assertNameAvailable(name, excludeId, repository) {
+  const conflict = await repository.findCountryByNameExcludingId(name, excludeId);
+  if (conflict) {
+    const error = new Error("A country with this name already exists.");
+    error.code = "NAME_TAKEN";
+    throw error;
+  }
+}
+
+export async function createCountryForAdmin(data, repository = countryRepository) {
+  await assertNameAvailable(data.name, null, repository);
+  return repository.createCountry(data);
+}
+
+export async function updateCountryForAdmin(id, data, repository = countryRepository) {
+  await assertNameAvailable(data.name, id, repository);
+  return repository.updateCountry(id, data);
+}
+
+export async function deleteCountryForAdmin(id, repository = countryRepository) {
+  return repository.deleteCountry(id);
+}

@@ -108,6 +108,40 @@ export async function listPublicCountries() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Admin CRUD - flat country fields only, no nested relations.
+// ---------------------------------------------------------------------------
+
+export async function listAdminCountries() {
+  return prisma.country.findMany({
+    select: countryFields,
+    orderBy: { name: "asc" },
+  });
+}
+
+export async function findAdminCountryById(id) {
+  return prisma.country.findUnique({ where: { id }, select: countryFields });
+}
+
+export async function findCountryByNameExcludingId(name, excludeId) {
+  return prisma.country.findFirst({
+    where: excludeId ? { name, NOT: { id: excludeId } } : { name },
+    select: { id: true },
+  });
+}
+
+export async function createCountry(data) {
+  return prisma.country.create({ data, select: countryFields });
+}
+
+export async function updateCountry(id, data) {
+  return prisma.country.update({ where: { id }, data, select: countryFields });
+}
+
+export async function deleteCountry(id) {
+  return prisma.country.delete({ where: { id } });
+}
+
 export async function findPublicCountryById(id) {
   return prisma.country.findUnique({
     where: { id },

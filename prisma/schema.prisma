@@ -31,6 +31,7 @@ enum ArticleCategory {
   VISA
   STUDENT_LIFE
   CAREER
+  GUIDES
 }
 
 enum ArticleStatus {
@@ -548,6 +549,13 @@ model SourceItem {
   title            String
   summary          String?                 @db.Text
   publishedAt      DateTime?
+  // Hash of (title + summary + publishedAt) as seen at discovery time. Lets a
+  // later discovery run skip re-enqueueing the expensive detail fetch when a
+  // feed/listing item comes back byte-for-byte the same as last time. Never
+  // used for CHANGE_WATCH sources, whose discovery payload is static config,
+  // not page content — a hash of that would never change and would silently
+  // stop them from ever being re-checked.
+  discoveryHash    String?
   discoveredAt     DateTime                @default(now())
   processingStatus ProcessingStatus        @default(DISCOVERED)
   countryId        String?
@@ -720,5 +728,18 @@ model BackfillWindow {
 
   @@unique([backfillRunId, windowStart, windowEnd])
   @@index([backfillRunId, status])
+}
+
+// ============================================================
+// SITE SETTINGS (singleton row)
+// ============================================================
+
+model SiteSettings {
+  id           String   @id @default("singleton")
+  platformName String
+  tagline      String
+  contactEmail String
+  timezone     String
+  updatedAt    DateTime @updatedAt
 }
 
