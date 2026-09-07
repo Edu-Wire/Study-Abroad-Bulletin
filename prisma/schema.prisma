@@ -187,6 +187,10 @@ model Article {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
+  /** One-time share link for a draft: valid until previewExpiresAt, regenerated each time it's requested. */
+  previewToken     String?   @unique
+  previewExpiresAt DateTime?
+
   // Country Relations
   primaryCountryId String?
   primaryCountry   Country?         @relation("PrimaryCountry", fields: [primaryCountryId], references: [id])
@@ -735,11 +739,13 @@ model BackfillWindow {
 // ============================================================
 
 model SiteSettings {
-  id           String   @id @default("singleton")
-  platformName String
-  tagline      String
-  contactEmail String
-  timezone     String
-  updatedAt    DateTime @updatedAt
+  id                     String   @id @default("singleton")
+  platformName           String
+  tagline                String
+  contactEmail           String
+  timezone               String
+  /** Where new-draft notification emails are sent. */
+  draftNotificationEmail String   @default("info@digi-wire.com")
+  updatedAt              DateTime @updatedAt
 }
 

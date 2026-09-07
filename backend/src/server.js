@@ -47,6 +47,7 @@ import {
   PasswordChangeSchema,
 } from "./validators/index.js";
 import { getPersonalizedRecommendations } from "./services/recommendation.js";
+import { sendDraftNotificationEmail, sendDraftNotificationEmailOrThrow, sendDraftDigestEmail } from "./modules/notifications/email.service.js";
 import ingestionRoutes from "./modules/ingestion/ingestion.routes.js";
 import { canonicalizeUrl } from "./modules/ingestion/utils/urlCanonicalizer.js";
 import editorialRoutes from "./modules/ingestion/editorial.routes.js";
@@ -1005,6 +1006,11 @@ app.post(
         });
       });
 
+      if (newArticle.status === "DRAFT") {
+        // Fire-and-forget: don't let a slow/broken mail server block article creation.
+        sendDraftNotificationEmail(newArticle);
+      }
+
       return res.status(201).json({
         success: true,
         message: "Article created successfully.",
@@ -1017,6 +1023,57 @@ app.post(
         return res.status(409).json({ success: false, message: `An article with this unique value${field} already exists.` });
       }
       return res.status(500).json({ success: false, message: "Failed to create article." });
+    }
+  });
+
+/**
+ * @route   POST /api/admin/articles/:id/notify
+ * @desc    Manually (re)send the new-draft notification email for one article
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
+ */
+app.post(
+  "/api/admin/articles/:id/notify",
+  ...requireEditor,
+  adminMutationLimiter,
+  async (req, res) => {
+    try {
+      const article = await prisma.article.findUnique({ where: { id: req.params.id } });
+      if (!article) {
+        return res.status(404).json({ success: false, message: "Article not found." });
+      }
+      await sendDraftNotificationEmailOrThrow(article);
+      return res.status(200).json({ success: true, message: "Notification email sent." });
+    } catch (error) {
+      console.error("Send draft notification error:", error);
+      return res.status(500).json({ success: false, message: `Failed to send notification email: ${error.message}` });
+    }
+  });
+
+/**
+ * @route   POST /api/admin/articles/digest
+ * @desc    Send one email listing every current draft, with a read-only
+ *          HTML preview of all of them attached
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
+ */
+app.post(
+  "/api/admin/articles/digest",
+  ...requireEditor,
+  adminMutationLimiter,
+  async (req, res) => {
+    try {
+      const drafts = await prisma.article.findMany({
+        where: { status: "DRAFT" },
+        orderBy: { createdAt: "desc" },
+      });
+      if (drafts.length === 0) {
+        return res.status(200).json({ success: true, message: "No drafts to send.", count: 0 });
+      }
+      const { to, subject } = req.body || {};
+      await sendDraftDigestEmail(drafts, { to, subject });
+      return res.status(200).json({ success: true, message: `Digest sent for ${drafts.length} draft(s).`, count: drafts.length });
+    } catch (error) {
+      console.error("Send draft digest error:", error);
+      return res.status(500).json({ success: false, message: `Failed to send digest: ${error.message}` });
     }
   });
 

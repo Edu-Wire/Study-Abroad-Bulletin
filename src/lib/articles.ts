@@ -404,3 +404,38 @@ export async function getArticleBySlugForAdmin(slug: string): Promise<AdminArtic
     return null;
   }
 }
+
+/**
+ * Renders a draft (or any non-published status) for a reviewer who has a
+ * share link but no login — the token must match the row's live
+ * `previewToken` and not be past `previewExpiresAt`. A fresh token is issued
+ * every time a notification email goes out (see `email.service.js`), so an
+ * old link stops working the moment a newer one is sent, not just on expiry.
+ */
+export async function getArticleByPreviewToken(
+  slug: string,
+  token: string
+): Promise<AdminArticleRaw | null> {
+  if (!token) return null;
+  try {
+    const row = await prisma.article.findFirst({
+      where: {
+        slug,
+        previewToken: token,
+        previewExpiresAt: { gt: new Date() },
+      },
+      include: {
+        primaryCountry: true,
+        countries: { include: { country: true } },
+      },
+    });
+    if (!row) return null;
+    return row as AdminArticleRaw;
+  } catch (error) {
+    console.error(
+      `[articles.ts] ❌ Preview token lookup failed for slug "${slug}":`,
+      error
+    );
+    return null;
+  }
+}
