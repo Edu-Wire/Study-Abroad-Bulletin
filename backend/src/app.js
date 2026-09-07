@@ -42,6 +42,7 @@ import {
   ArticleCreateSchema,
   ArticleUpdateSchema,
   ArticleStatusUpdateSchema,
+  ArticleBulkStatusSchema,
   RssImportSchema,
   StudentProfileSchema,
   PasswordChangeSchema,
@@ -874,7 +875,7 @@ app.get(
       ];
     }
 
-    const [articles, totalCount] = await prisma.$transaction([
+    const [articles, totalCount, statusCountsRaw] = await prisma.$transaction([
       prisma.article.findMany({
         where,
         skip,
@@ -888,7 +889,24 @@ app.get(
         },
       }),
       prisma.article.count({ where }),
+      prisma.article.groupBy({
+        by: ["status"],
+        _count: { status: true },
+      }),
     ]);
+
+    const statusCounts = {
+      ALL: 0,
+      PUBLISHED: 0,
+      DRAFT: 0,
+      PENDING_REVIEW: 0,
+      ARCHIVED: 0,
+      REJECTED: 0,
+    };
+    for (const row of statusCountsRaw) {
+      statusCounts[row.status] = row._count.status;
+      statusCounts.ALL += row._count.status;
+    }
 
     return res.status(200).json({
       success: true,
@@ -896,6 +914,7 @@ app.get(
       totalCount,
       totalPages: Math.ceil(totalCount / limitNum),
       currentPage: pageNum,
+      statusCounts,
     });
   } catch (error) {
     console.error("Fetch admin articles error:", error);
@@ -1071,6 +1090,38 @@ app.put(
       return res.status(409).json({ success: false, message: `An article with this unique value${field} already exists.` });
     }
     return res.status(500).json({ success: false, message: "Failed to update article." });
+  }
+});
+
+/**
+ * @route   PATCH /api/admin/articles/bulk-status
+ * @desc    Change status for multiple articles at once
+ * @access  EDITOR, ADMIN, SUPER_ADMIN
+ */
+app.patch(
+  "/api/admin/articles/bulk-status",
+  ...requireEditor,
+  adminMutationLimiter,
+  validateRequest({ body: ArticleBulkStatusSchema }),
+  async (req, res) => {
+  try {
+    const { ids, status } = res.locals.validated.body;
+    const result = await prisma.article.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        status,
+        publishedAt: status === "PUBLISHED" ? new Date() : undefined,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Updated status to ${status} for ${result.count} article(s).`,
+      count: result.count,
+    });
+  } catch (error) {
+    console.error("Bulk status update error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update article statuses." });
   }
 });
 

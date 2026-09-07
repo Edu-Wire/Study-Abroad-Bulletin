@@ -38,137 +38,137 @@ const STATUS_CONFIG: Record<
   // Editorial / Article Statuses
   PUBLISHED: {
     label: "Published",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-700",
-    border: "border-emerald-500/20",
-    dot: "bg-emerald-500",
+    bg: "bg-[#DCFCE7]",
+    text: "text-[#166534]",
+    border: "border-[#BBF7D0]",
+    dot: "bg-[#16A34A]",
   },
   DRAFT: {
     label: "Draft",
-    bg: "bg-amber-500/10",
-    text: "text-amber-700",
-    border: "border-amber-500/20",
-    dot: "bg-amber-500",
+    bg: "bg-[#FEF3C7]",
+    text: "text-[#92400E]",
+    border: "border-[#FDE68A]",
+    dot: "bg-[#D97706]",
   },
   PENDING_REVIEW: {
     label: "Pending Review",
-    bg: "bg-indigo-500/10",
-    text: "text-indigo-700",
-    border: "border-indigo-500/20",
-    dot: "bg-indigo-500",
+    bg: "bg-[#E0E7FF]",
+    text: "text-[#3730A3]",
+    border: "border-[#C7D2FE]",
+    dot: "bg-[#6366F1]",
   },
   ARCHIVED: {
     label: "Archived",
-    bg: "bg-slate-500/10",
-    text: "text-slate-600",
-    border: "border-slate-500/20",
-    dot: "bg-slate-400",
+    bg: "bg-[#E2E8F0]",
+    text: "text-[#334155]",
+    border: "border-[#CBD5E1]",
+    dot: "bg-[#64748B]",
   },
   REJECTED: {
     label: "Rejected",
-    bg: "bg-rose-500/10",
-    text: "text-rose-700",
-    border: "border-rose-500/20",
-    dot: "bg-rose-500",
+    bg: "bg-[#FFE4E6]",
+    text: "text-[#9F1239]",
+    border: "border-[#FECDD3]",
+    dot: "bg-[#F43F5E]",
   },
 
   // User / Member Statuses
   ACTIVE: {
     label: "Active",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-700",
-    border: "border-emerald-500/20",
-    dot: "bg-emerald-500",
+    bg: "bg-[#DCFCE7]",
+    text: "text-[#166534]",
+    border: "border-[#BBF7D0]",
+    dot: "bg-[#16A34A]",
   },
   INVITED: {
     label: "Invited",
-    bg: "bg-amber-500/10",
-    text: "text-amber-700",
-    border: "border-amber-500/20",
-    dot: "bg-amber-500",
+    bg: "bg-[#FEF3C7]",
+    text: "text-[#92400E]",
+    border: "border-[#FDE68A]",
+    dot: "bg-[#D97706]",
   },
   SUSPENDED: {
     label: "Suspended",
-    bg: "bg-rose-500/10",
-    text: "text-rose-700",
-    border: "border-rose-500/20",
-    dot: "bg-rose-500",
+    bg: "bg-[#FFE4E6]",
+    text: "text-[#9F1239]",
+    border: "border-[#FECDD3]",
+    dot: "bg-[#F43F5E]",
   },
 
   // Visa & Alert Statuses
   URGENT: {
     label: "Urgent Policy",
-    bg: "bg-rose-500/10",
-    text: "text-rose-700",
-    border: "border-rose-500/20",
-    dot: "bg-rose-500",
+    bg: "bg-[#FFE4E6]",
+    text: "text-[#9F1239]",
+    border: "border-[#FECDD3]",
+    dot: "bg-[#F43F5E]",
   },
   STANDARD: {
     label: "Standard Notice",
-    bg: "bg-slate-500/10",
-    text: "text-slate-700",
-    border: "border-slate-500/20",
-    dot: "bg-slate-400",
+    bg: "bg-[#E2E8F0]",
+    text: "text-[#334155]",
+    border: "border-[#CBD5E1]",
+    dot: "bg-[#64748B]",
   },
 
   // Source Type Badges
   RSS: {
     label: "RSS Import",
-    bg: "bg-sky-500/10",
-    text: "text-sky-700",
-    border: "border-sky-500/20",
-    dot: "bg-sky-500",
+    bg: "bg-[#D0E2FF]",
+    text: "text-[#1B3256]",
+    border: "border-[#B2D2FE]",
+    dot: "bg-[#1D68E2]",
   },
   EDITORIAL: {
     label: "Editorial",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-700",
-    border: "border-emerald-500/20",
-    dot: "bg-emerald-500",
+    bg: "bg-[#D1F2E0]",
+    text: "text-[#0D5432]",
+    border: "border-[#A8E6C3]",
+    dot: "bg-[#10B981]",
   },
 
   // Deadline & Scholarship Statuses
   OPEN: {
     label: "Open",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-700",
-    border: "border-emerald-500/20",
-    dot: "bg-emerald-500",
+    bg: "bg-[#DCFCE7]",
+    text: "text-[#166534]",
+    border: "border-[#BBF7D0]",
+    dot: "bg-[#16A34A]",
   },
   CLOSING_SOON: {
     label: "Closing Soon",
-    bg: "bg-rose-500/10",
-    text: "text-rose-700",
-    border: "border-rose-500/20",
-    dot: "bg-rose-500",
+    bg: "bg-[#FFE4E6]",
+    text: "text-[#9F1239]",
+    border: "border-[#FECDD3]",
+    dot: "bg-[#F43F5E]",
   },
   FULLY_FUNDED: {
     label: "Fully Funded",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-700",
-    border: "border-emerald-500/20",
-    dot: "bg-emerald-500",
+    bg: "bg-[#DCFCE7]",
+    text: "text-[#166534]",
+    border: "border-[#BBF7D0]",
+    dot: "bg-[#16A34A]",
   },
   PARTIAL: {
     label: "Partial Funding",
-    bg: "bg-blue-500/10",
-    text: "text-blue-700",
-    border: "border-blue-500/20",
-    dot: "bg-blue-500",
+    bg: "bg-[#D0E2FF]",
+    text: "text-[#1B3256]",
+    border: "border-[#B2D2FE]",
+    dot: "bg-[#1D68E2]",
   },
   AVAILABLE: {
     label: "Available",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-700",
-    border: "border-emerald-500/20",
-    dot: "bg-emerald-500",
+    bg: "bg-[#DCFCE7]",
+    text: "text-[#166534]",
+    border: "border-[#BBF7D0]",
+    dot: "bg-[#16A34A]",
   },
   NONE: {
     label: "None",
-    bg: "bg-slate-100",
-    text: "text-slate-600",
-    border: "border-slate-200",
-    dot: "bg-slate-400",
+    bg: "bg-[#E2E8F0]",
+    text: "text-[#475569]",
+    border: "border-[#CBD5E1]",
+    dot: "bg-[#64748B]",
   },
 };
 
@@ -182,22 +182,22 @@ export function StatusBadge({
   const normalizedKey = (status || "").toUpperCase().replace(/\s+/g, "_");
   const config = STATUS_CONFIG[normalizedKey] || {
     label: label || status,
-    bg: "bg-slate-100",
-    text: "text-slate-700",
-    border: "border-slate-200",
-    dot: "bg-slate-400",
+    bg: "bg-[#E2E8F0]",
+    text: "text-[#334155]",
+    border: "border-[#CBD5E1]",
+    dot: "bg-[#64748B]",
   };
 
   const displayText = label || config.label || status;
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-medium rounded-full border transition-colors ${
+      className={`inline-flex items-center gap-1.5 font-semibold rounded-md border transition-colors shadow-2xs ${
         config.bg
       } ${config.text} ${config.border} ${
         size === "sm"
-          ? "px-2.5 py-0.5 text-[11px] leading-tight"
-          : "px-3 py-1 text-xs leading-normal"
+          ? "px-2 py-0.5 text-[11px] leading-tight"
+          : "px-2.5 py-1 text-xs leading-normal"
       } ${className}`}
     >
       {showDot && (

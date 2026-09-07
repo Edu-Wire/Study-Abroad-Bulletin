@@ -66,7 +66,7 @@ export function AdminPageHeader({
               onExport ||
               (() => alert("Export format (CSV/JSON) is scheduled for backend phase."))
             }
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 h-9 px-4 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 rounded-full shadow-2xs transition-colors cursor-pointer"
           >
             <Download className="h-3.5 w-3.5 text-slate-500" />
             <span>Export</span>
@@ -76,7 +76,7 @@ export function AdminPageHeader({
         {addLabel && onAdd && (
           <button
             onClick={onAdd}
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 bg-[#1769E0] hover:bg-[#1357bd] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 h-9 px-4 bg-[#1769E0] hover:bg-[#1357bd] text-white text-xs font-semibold rounded-full shadow-2xs transition-colors cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             <span>{addLabel}</span>

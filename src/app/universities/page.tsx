@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import prisma from "@/lib/prisma";
+import type { University } from "@/contracts/universities";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
@@ -11,7 +13,49 @@ export const metadata: Metadata = {
     "Search and compare universities worldwide by country, course, ranking and tuition. Find your perfect university match.",
 };
 
-export default function UniversitiesPage() {
+async function getUniversities(): Promise<University[]> {
+  try {
+    const rows = await prisma.university.findMany({
+      include: { country: true },
+      orderBy: { ranking: "asc" },
+    });
+
+    return rows.map((u) => ({
+      id:           u.id,
+      sourceId:     u.sourceId,
+      slug:         u.slug,
+      name:         u.name,
+      initials:     u.initials,
+      country:      u.country?.name ?? "",
+      countryId:    u.countryId,
+      city:         u.city,
+      ranking:      u.ranking,
+      tuition:      u.tuition,
+      tuitionValue: u.tuitionValue,
+      courses:      u.courses,
+      scholarships: u.scholarships,
+      intake:       u.intake,
+      degree:       (u.degree === "Bachelors" || u.degree === "Masters" ? u.degree : "Both") as "Bachelors" | "Masters" | "Both",
+      ielts:        u.ielts,
+      qsRanking:                          u.qsRanking,
+      usNewsRanking:                      u.usNewsRanking,
+      webomatricsNationalRanking:         u.webomatricsNationalRanking,
+      webomatricsWorldRanking:            u.webomatricsWorldRanking,
+      universityLogoExtension:            u.universityLogoExtension,
+      universityAverageScholarship:       u.universityAverageScholarship
+        ? Number(u.universityAverageScholarship)
+        : null,
+      universityAverageScholarshipRemarks: u.universityAverageScholarshipRemarks,
+    }));
+  } catch (err) {
+    console.error("[universities/page] Failed to fetch from DB:", err);
+    return [];
+  }
+}
+
+export default async function UniversitiesPage() {
+  const universities = await getUniversities();
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 w-full max-w-full overflow-x-clip">
       <Header />
@@ -38,10 +82,11 @@ export default function UniversitiesPage() {
         </div>
 
         {/* University discovery with filters */}
-        <FindYourUniversity />
+        <FindYourUniversity initialData={universities} showAll showHeading={false} />
       </main>
       <Footer />
       <MobileBottomNav />
     </div>
   );
 }
+

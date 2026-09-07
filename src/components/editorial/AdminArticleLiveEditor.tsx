@@ -147,6 +147,16 @@ function rebuildContent(paragraphs: string[]): string {
 // Component
 // ---------------------------------------------------------------------------
 
+/** Format a Date relative to now, e.g. "just now", "2 min ago" */
+function formatRelativeTime(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 10) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEditorProps) {
   const router = useRouter();
   const [editMode, setEditMode] = useState(false);
@@ -154,6 +164,14 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [currentStatus, setCurrentStatus] = useState(article.status);
+
+  // Dirty tracking & save feedback
+  const [isDirty, setIsDirty] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
+  // Guard modals
+  const [showExitGuard, setShowExitGuard] = useState(false);
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
 
   // In-place editable state
   const [headline, setHeadline] = useState(article.headline);
@@ -277,15 +295,47 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
       e.returnValue = "";
     };
 
+    // Ctrl+S / ⌘S keyboard shortcut to save
+    const handleKeydown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        // Access isDirty via ref workaround — trigger save only when changes exist
+        const saveBtn = document.getElementById("admin-save-btn") as HTMLButtonElement | null;
+        if (saveBtn && !saveBtn.disabled) {
+          saveBtn.click();
+        }
+      }
+    };
+
     document.addEventListener("click", handleGlobalClick, true);
     window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("keydown", handleKeydown);
 
     return () => {
       document.body.classList.remove("admin-edit-mode-active");
       document.removeEventListener("click", handleGlobalClick, true);
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("keydown", handleKeydown);
     };
   }, [editMode]);
+
+  // ---------------------------------------------------------------------------
+  // Dirty state tracker — compares all fields against original article props
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const dirty =
+      headline !== article.headline ||
+      summary !== article.summary ||
+      rebuildContent(paragraphs) !== (article.content ?? "") ||
+      category !== article.category ||
+      image !== (article.image ?? "/images/news-library.jpg") ||
+      readingTime !== (article.readingTime ?? "3 min read") ||
+      breaking !== Boolean(article.breaking) ||
+      featured !== Boolean(article.featured) ||
+      primaryCountryId !== (article.primaryCountryId ?? "") ||
+      JSON.stringify(countryIds) !== JSON.stringify(article.countryIds ?? []);
+    setIsDirty(dirty);
+  }, [headline, summary, paragraphs, category, image, readingTime, breaking, featured, primaryCountryId, countryIds, article]);
 
   function autoCalculateReadingTime() {
     const fullText = `${headline} ${summary} ${paragraphs.join(" ")}`;
@@ -318,6 +368,8 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
       if (!data.success) {
         throw new Error(data?.message || "Save failed.");
       }
+      setIsDirty(false);
+      setLastSavedAt(new Date());
       showToast("success", "All article changes saved successfully!");
       router.refresh();
     } catch (err: unknown) {
@@ -371,6 +423,16 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
   }
 
   function handleBack() {
+    if (isDirty && editMode) {
+      setShowExitGuard(true);
+      return;
+    }
+    window.close();
+    setTimeout(() => { window.location.href = "/admin/news"; }, 300);
+  }
+
+  function confirmExit() {
+    setShowExitGuard(false);
     window.close();
     setTimeout(() => { window.location.href = "/admin/news"; }, 300);
   }
@@ -463,37 +525,19 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
           )}
         </div>
 
-        {/* Center — Editorial Toggles (Breaking / Featured) */}
-        {editMode && (
-          <div className="hidden lg:flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-lg p-0.5">
-            <button
-              type="button"
-              onClick={() => setBreaking((v) => !v)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded font-semibold transition-all ${
-                breaking
-                  ? "bg-amber-500 text-slate-950 shadow"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="Toggle Breaking News strip"
-            >
-              <Zap className="h-3 w-3" />
-              <span>Breaking {breaking ? "ON" : "OFF"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFeatured((v) => !v)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded font-semibold transition-all ${
-                featured
-                  ? "bg-indigo-500 text-white shadow"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="Toggle Featured Cover Story"
-            >
-              <Sparkles className="h-3 w-3" />
-              <span>Featured {featured ? "ON" : "OFF"}</span>
-            </button>
-          </div>
-        )}
+        {/* Center — Last saved indicator (replaces duplicate Breaking/Featured toggles) */}
+        <div className="hidden lg:flex items-center">
+          {lastSavedAt && !isDirty && (
+            <span className="text-slate-400 text-[10px] font-medium">
+              ✓ Saved {formatRelativeTime(lastSavedAt)}
+            </span>
+          )}
+          {isDirty && editMode && (
+            <span className="text-amber-400 text-[10px] font-medium animate-pulse">
+              ● Unsaved changes
+            </span>
+          )}
+        </div>
 
         {/* Right — edit toggle + save + publish */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -519,26 +563,36 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
             )}
           </button>
 
-          {/* Save button */}
+          {/* Save button — disabled when clean, enabled when dirty */}
           <button
             id="admin-save-btn"
             onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 font-semibold rounded px-2.5 py-1.5
-                       bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+            disabled={saving || !isDirty}
+            title={isDirty ? "Save changes (Ctrl+S)" : "No unsaved changes"}
+            className={`flex items-center gap-1.5 font-semibold rounded px-2.5 py-1.5 transition-all ${
+              saving || !isDirty
+                ? "bg-slate-600 text-slate-300 cursor-not-allowed opacity-60"
+                : "bg-blue-600 text-white hover:bg-blue-500 shadow-sm"
+            }`}
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            <span>{saving ? "Saving…" : "Save"}</span>
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : isDirty ? (
+              <Save className="h-3.5 w-3.5" />
+            ) : (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            )}
+            <span>{saving ? "Saving…" : isDirty ? "Save" : "Saved"}</span>
           </button>
 
-          {/* Publish button — always accessible for instant live publishing */}
+          {/* Publish button — opens confirmation modal before publishing */}
           <button
             id="admin-publish-btn"
-            onClick={handlePublish}
+            onClick={() => setShowPublishConfirm(true)}
             disabled={publishing}
             className="flex items-center gap-1.5 font-semibold rounded px-3 py-1.5
                        bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-            title="Publish all story changes live to the website"
+            title="Publish story changes live to the website"
           >
             {publishing ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -574,6 +628,90 @@ export default function AdminArticleLiveEditor({ article }: AdminArticleLiveEdit
           <button onClick={() => setToast(null)} className="ml-2 text-current/60 hover:text-current transition-colors">
             <X className="h-3.5 w-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Exit Guard Modal — fires when Back to Admin clicked with dirty state */}
+      {/* ------------------------------------------------------------------ */}
+      {showExitGuard && (
+        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-background border border-border rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-start gap-3 p-6">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-foreground text-base">Unsaved Changes</h3>
+                <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+                  You have unsaved changes to this article. If you leave now, your edits will be permanently lost.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2.5 px-6 pb-6">
+              <button
+                type="button"
+                onClick={confirmExit}
+                className="flex-1 h-10 text-sm font-semibold bg-red-600 text-white hover:bg-red-500 rounded-lg transition-colors"
+              >
+                Leave Without Saving
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowExitGuard(false)}
+                className="flex-1 h-10 text-sm font-semibold border border-border rounded-lg text-foreground hover:bg-surface transition-colors"
+              >
+                Keep Editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Publish Confirmation Modal                                           */}
+      {/* ------------------------------------------------------------------ */}
+      {showPublishConfirm && (
+        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-background border border-border rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-start gap-3 p-6">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                <Send className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-foreground text-base">
+                  {currentStatus === "PUBLISHED" ? "Push Updates Live?" : "Publish This Story?"}
+                </h3>
+                <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+                  {currentStatus === "PUBLISHED"
+                    ? "This will immediately update the live story visible to all readers. Any unsaved edits will also be saved."
+                    : "This will publish the story and make it publicly visible to all readers on the website."}
+                </p>
+                {isDirty && (
+                  <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
+                    ⚠ You have unsaved changes — these will be included in the publish.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2.5 px-6 pb-6">
+              <button
+                type="button"
+                onClick={() => { handlePublish(); setShowPublishConfirm(false); }}
+                className="flex-1 h-10 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Send className="h-3.5 w-3.5" />
+                {currentStatus === "PUBLISHED" ? "Yes, Push Live" : "Yes, Publish"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPublishConfirm(false)}
+                className="flex-1 h-10 text-sm font-semibold border border-border rounded-lg text-foreground hover:bg-surface transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

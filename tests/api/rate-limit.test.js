@@ -141,6 +141,7 @@ function chainFor(method, routePath) {
 const MUTATIONS_REQUIRING_LIMITER = [
   ["post", "/api/admin/articles"],
   ["put", "/api/admin/articles/:id"],
+  ["patch", "/api/admin/articles/bulk-status"],
   ["patch", "/api/admin/articles/:id/status"],
   ["delete", "/api/admin/articles/:id"],
   ["post", "/api/admin/articles/import-rss"],
