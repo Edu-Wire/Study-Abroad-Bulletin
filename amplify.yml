@@ -8,6 +8,11 @@ frontend:
         - npx prisma generate
     build:
       commands:
+        # Amplify only exposes Console-configured env vars during the build step,
+        # not to the deployed SSR runtime. Writing them to .env.production makes
+        # Next.js load them for server components / route handlers at request time.
+        # https://docs.aws.amazon.com/amplify/latest/userguide/ssr-environment-variables.html
+        - env | grep -e BACKEND_URL -e BFF_SHARED_SECRET -e DATABASE_URL -e TRUSTED_PROXY_HOP_COUNT >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
