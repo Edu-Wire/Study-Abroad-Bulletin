@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { signup as apiSignup } from "@/lib/api/auth";
 
@@ -15,6 +16,7 @@ export default function SignupPage() {
     email: "",
     password: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -30,17 +32,19 @@ export default function SignupPage() {
 
     try {
       const res = await apiSignup(formData);
-      if (res.success && res.token) {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("authToken", res.token);
-          if (res.user) {
-            localStorage.setItem("authUser", JSON.stringify(res.user));
-          }
-        }
+      // The session arrives as an HttpOnly cookie; nothing is stored here.
+      if (res.success) {
         router.push("/auth/welcome");
+        router.refresh();
+      } else {
+        setError(res.message || "Registration failed. Please try again.");
       }
-    } catch (err: any) {
-      setError(err?.message || "Registration failed. Please try again.");
+    } catch (err: unknown) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : "";
+      setError(message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -122,17 +126,33 @@ export default function SignupPage() {
             </div>
             <div>
               <label htmlFor="signup-password" className="meta mb-1 block text-foreground">Password</label>
-              <input
-                id="signup-password"
-                name="password"
-                type="password"
-                required
-                autoComplete="new-password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Create a password"
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
-              />
+              <div className="relative">
+                <input
+                  id="signup-password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="Create a password"
+                  className="h-10 w-full rounded-md border border-border bg-background pl-3 pr-10 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
             <button
               type="submit"

@@ -1,16 +1,61 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Globe, Eye, Edit3, Trash2, X, Sparkles } from "lucide-react";
+import { Globe, Eye, Edit3, Trash2, Loader2 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer, AdminEmptyState } from "@/components/admin/AdminTable";
 import { StatusBadge } from "@/components/admin/StatusBadge";
-import { countries } from "@/data/mock";
+import { CountryFormModal } from "@/components/admin/CountryFormModal";
+import { adminGet, adminDelete } from "@/lib/api/apiClient";
+
+interface Country {
+  id: string;
+  name: string;
+  code: string;
+  flag: string;
+  universitiesCount: number;
+  averageTuition: string;
+  popularIntake: string;
+  updatesCount: number;
+  heroImage: string | null;
+}
 
 export default function AdminCountriesPage() {
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [modal, setModal] = useState<
+    { mode: "create" } | { mode: "edit"; country: Country } | null
+  >(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    adminGet<{ success: boolean; countries: Country[] }>("/admin/countries")
+      .then((d) => {
+        if (d.success) setCountries(d.countries);
+      })
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed to load countries.")
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
+    load();
+  }, [load]);
+
+  const handleDelete = async (c: Country) => {
+    if (!confirm(`Delete "${c.name}"? This cannot be undone.`)) return;
+    try {
+      await adminDelete(`/admin/countries/${c.id}`);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete country.");
+    }
+  };
 
   const filteredCountries = countries.filter(
     (c) =>
@@ -26,8 +71,14 @@ export default function AdminCountriesPage() {
         count={countries.length}
         countLabel="destinations"
         addLabel="Add Country"
-        onAdd={() => setActionNotice("Create Country Dossier")}
+        onAdd={() => setModal({ mode: "create" })}
       />
+
+      {error && (
+        <div className="p-3 rounded-lg bg-rose-50 text-rose-800 border border-rose-200/80 text-xs font-medium">
+          {error}
+        </div>
+      )}
 
       <AdminTableContainer
         count={filteredCountries.length}
@@ -36,7 +87,12 @@ export default function AdminCountriesPage() {
         searchPlaceholder="Search destinations, intake seasons..."
         footerNote={`Displaying ${filteredCountries.length} of ${countries.length} destination dossiers`}
       >
-        {filteredCountries.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-slate-400 text-xs">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading countries...
+          </div>
+        ) : filteredCountries.length === 0 ? (
           <AdminEmptyState
             title="No countries found"
             description="No destinations match your search query."
@@ -77,7 +133,7 @@ export default function AdminCountriesPage() {
                     </div>
                   </td>
                   <td className="py-3.5 px-3 font-semibold text-slate-900 whitespace-nowrap">
-                    {c.universities} institutions
+                    {c.universitiesCount} institutions
                   </td>
                   <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">
                     {c.averageTuition}
@@ -88,7 +144,7 @@ export default function AdminCountriesPage() {
                     </span>
                   </td>
                   <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">
-                    {c.updates} updates
+                    {c.updatesCount} updates
                   </td>
                   <td className="py-3.5 px-3 whitespace-nowrap">
                     <StatusBadge status="ACTIVE" label="Active Dossier" size="sm" />
@@ -104,16 +160,16 @@ export default function AdminCountriesPage() {
                         <Eye className="h-3.5 w-3.5" />
                       </Link>
                       <button
-                        onClick={() => setActionNotice(`Edit Dossier: ${c.name}`)}
+                        onClick={() => setModal({ mode: "edit", country: c })}
                         className="p-1.5 text-slate-500 hover:text-[#1769E0] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                         title="Edit Dossier"
                       >
                         <Edit3 className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        onClick={() => setActionNotice(`Archive Dossier: ${c.name}`)}
+                        onClick={() => handleDelete(c)}
                         className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        title="Archive Dossier"
+                        title="Delete Dossier"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -126,42 +182,17 @@ export default function AdminCountriesPage() {
         )}
       </AdminTableContainer>
 
-      {/* Action Notice Modal */}
-      {actionNotice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#071A33]/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 p-6 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-50 text-[#1769E0] border border-blue-100 flex items-center justify-center shrink-0">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">{actionNotice}</h3>
-                  <p className="text-xs text-slate-500">Country Dossier System</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setActionNotice(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 leading-relaxed">
-              Destination intelligence and immigration overview content are synchronized with the central portal.
-            </div>
-
-            <div className="mt-5 flex justify-end">
-              <button
-                onClick={() => setActionNotice(null)}
-                className="px-4 py-2 text-xs font-semibold text-white bg-[#1769E0] hover:bg-[#1357bd] rounded-lg transition-colors cursor-pointer shadow-2xs"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+      {modal && (
+        <CountryFormModal
+          mode={modal.mode}
+          initialData={
+            modal.mode === "edit"
+              ? { ...modal.country, heroImage: modal.country.heroImage ?? "" }
+              : undefined
+          }
+          onClose={() => setModal(null)}
+          onSuccess={load}
+        />
       )}
     </div>
   );

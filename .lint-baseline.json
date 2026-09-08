@@ -1,0 +1,9 @@
+{
+  "totalWarnings": 38,
+  "warningsByRule": {
+    "(no rule)": 1,
+    "@next/next/no-location-assign-relative-destination": 1,
+    "@typescript-eslint/no-unused-vars": 35,
+    "jsx-a11y/role-supports-aria-props": 1
+  }
+}

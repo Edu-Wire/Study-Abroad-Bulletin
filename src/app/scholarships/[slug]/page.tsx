@@ -6,8 +6,10 @@ import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { BookmarkButton } from "@/components/common/BookmarkButton";
 import { CountryFlag } from "@/components/common/CountryFlag";
-import { scholarships } from "@/data/mock";
+import { getScholarships, getScholarship, toFrontendScholarship } from "@/lib/server/scholarships";
 import { AdSidebar } from "@/components/editorial/AdComponents";
+
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -15,26 +17,26 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const s = scholarships.find((s) => s.id === slug);
-  if (!s) return { title: "Scholarship not found" };
+  const apiScholarship = await getScholarship(slug);
+  if (!apiScholarship) return { title: "Scholarship not found" };
+  const s = toFrontendScholarship(apiScholarship);
   return {
     title: `${s.name} — ${s.organization}`,
     description: `${s.type} scholarship for ${s.degree} students in ${s.country}. Deadline: ${s.deadline}.`,
   };
 }
 
-export function generateStaticParams() {
-  return scholarships.map((s) => ({ slug: s.id }));
-}
-
 export default async function ScholarshipDetailPage({ params }: Props) {
   const { slug } = await params;
-  const s = scholarships.find((sc) => sc.id === slug);
-  if (!s) notFound();
+  const apiScholarship = await getScholarship(slug);
+  if (!apiScholarship) notFound();
+  const s = toFrontendScholarship(apiScholarship);
 
   const closingSoon = s.daysLeft <= 14;
-  const related = scholarships.filter((sc) => sc.id !== s.id).slice(0, 4);
-
+  const related = (await getScholarships())
+    .map(toFrontendScholarship)
+    .filter((sc) => sc.id !== s.id)
+    .slice(0, 4);
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
       <Header />

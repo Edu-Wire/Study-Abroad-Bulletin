@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { login as apiLogin } from "@/lib/api/auth";
 
@@ -13,6 +14,7 @@ export default function LoginPage() {
     email: "",
     password: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -28,26 +30,36 @@ export default function LoginPage() {
 
     try {
       const res = await apiLogin(formData);
-      if (res.success && res.token) {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("authToken", res.token);
-          if (res.user) {
-            localStorage.setItem("authUser", JSON.stringify(res.user));
-            // Set cookie for Next.js server middleware
-            document.cookie = `auth_token=${res.token}; path=/; max-age=604800; SameSite=Lax`;
-            document.cookie = `auth_role=${res.user.role || "STUDENT"}; path=/; max-age=604800; SameSite=Lax`;
-          }
-        }
-
+      // Success is signalled by `success` alone. The session is an HttpOnly
+      // cookie set by the server; there is no token in the response to check
+      // and nothing for this page to persist.
+      if (res.success) {
         const role = res.user?.role;
-        if (role === "SUPER_ADMIN" || role === "ADMIN" || role === "EDITOR") {
-          router.push("/admin");
+        const destination =
+          role === "SUPER_ADMIN" || role === "ADMIN" || role === "EDITOR"
+            ? "/admin"
+            : "/dashboard";
+
+        // An administrator-issued temporary password must be replaced before
+        // anything else; Express refuses privileged routes until it is.
+        if (res.user?.mustChangePassword) {
+          router.push(
+            `/auth/change-password?required=1&redirect=${encodeURIComponent(destination)}`
+          );
         } else {
-          router.push("/dashboard");
+          router.push(destination);
         }
+        // Ensure server components re-resolve the new session.
+        router.refresh();
+      } else {
+        setError(res.message || "Invalid email or password.");
       }
-    } catch (err: any) {
-      setError(err?.message || "Invalid email or password.");
+    } catch (err: unknown) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : "";
+      setError(message || "Invalid email or password.");
     } finally {
       setLoading(false);
     }
@@ -113,17 +125,33 @@ export default function LoginPage() {
                   Forgot password?
                 </Link>
               </div>
-              <input
-                id="login-password"
-                name="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
-              />
+              <div className="relative">
+                <input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="current-password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  className="h-10 w-full rounded-md border border-border bg-background pl-3 pr-10 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
             <button
               type="submit"

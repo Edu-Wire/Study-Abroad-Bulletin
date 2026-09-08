@@ -2,6 +2,7 @@
 
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { logout as apiLogout } from "@/lib/api/auth";
 
 interface LogoutButtonProps {
   className?: string;
@@ -16,12 +17,17 @@ export function LogoutButton({
 }: LogoutButtonProps) {
   const router = useRouter();
 
-  const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("authUser");
+  const handleLogout = async () => {
+    // The server revokes the session and clears the HttpOnly cookie. There is
+    // no client-side auth state to tidy up, and the cookie is not readable
+    // from JavaScript by design.
+    try {
+      await apiLogout();
+    } catch {
+      // apiLogout already degrades gracefully; never trap the user here.
     }
     router.push("/auth/login");
+    router.refresh();
   };
 
   const baseStyles =

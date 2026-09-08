@@ -20,7 +20,7 @@
  */
 
 import prisma from "@/lib/prisma";
-import type { NewsArticle, NewsCategory } from "@/data/mock";
+import type { Guide, NewsArticle, NewsCategory, VisaUpdate } from "@/data/mock";
 
 // ---------------------------------------------------------------------------
 // Category mapping: Prisma enum → frontend display string
@@ -65,31 +65,32 @@ function formatPublishedDate(date: Date | string): string {
 // Mapper: Prisma Article row → NewsArticle (frontend type)
 // ---------------------------------------------------------------------------
 
-type ArticleRecord = {
-  id: string;
-  slug: string;
-  headline: string;
-  summary: string;
-  content: string | null;
-  category: string;
-  readingTime: string;
-  image: string | null;
-  breaking: boolean;
-  featured: boolean;
-  isRss: boolean;
-  sourceUrl: string | null;
-  sourceName: string | null;
-  publishedAt: Date | string;
-  primaryCountry: { id: string; name: string; flag: string } | null;
-};
-
-type ArticlesApiResponse = {
-  success: boolean;
-  articles: ArticleRecord[];
-};
-
-function mapArticleToNewsArticle(article: ArticleRecord): NewsArticle {
+function mapArticleToNewsArticle(
+  article: {
+    id: string;
+    slug: string;
+    headline: string;
+    summary: string;
+    content: string | null;
+    category: string;
+    readingTime: string;
+    image: string | null;
+    breaking: boolean;
+    featured: boolean;
+    isRss: boolean;
+    sourceUrl: string | null;
+    sourceName: string | null;
+    publishedAt: Date;
+    primaryCountry: { id: string; name: string; flag: string } | null;
+    countries?: { country: { id: string; name: string; flag: string } }[];
+  }
+): NewsArticle {
   const cat = article.category as string;
+  const countryName =
+    article.primaryCountry?.name ||
+    (article.countries && article.countries[0]?.country?.name) ||
+    "Global";
+
   return {
     id:          article.id,
     slug:        article.slug,
@@ -97,7 +98,7 @@ function mapArticleToNewsArticle(article: ArticleRecord): NewsArticle {
     summary:     article.summary,
     content:     article.content,
     category:    CATEGORY_MAP[cat] ?? "Universities",
-    country:     article.primaryCountry?.name ?? "Global",
+    country:     countryName,
     date:        formatPublishedDate(article.publishedAt),
     readingTime: article.readingTime,
     image:       article.image || CATEGORY_IMAGE[cat] || "/images/news-library.jpg",
@@ -106,75 +107,6 @@ function mapArticleToNewsArticle(article: ArticleRecord): NewsArticle {
     sourceUrl:   article.sourceUrl ?? undefined,
     sourceName:  article.sourceName ?? undefined,
   };
-}
-
-const productionBackendUrl = "https://13-233-198-182.sslip.io";
-
-function getApiBaseUrl(): string | null {
-  const raw = process.env.NEXT_PUBLIC_API_URL ||
-    (process.env.NODE_ENV === "production" ? productionBackendUrl : "");
-  if (!raw) return null;
-  const normalized = raw.replace(/\/+$/, "");
-  return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
-}
-
-async function getPublishedArticlesFromApi(): Promise<NewsArticle[] | null> {
-  const apiBaseUrl = getApiBaseUrl();
-  if (!apiBaseUrl) return null;
-
-  try {
-    const res = await fetch(
-      `${apiBaseUrl}/admin/articles?status=PUBLISHED&limit=100`,
-      { cache: "no-store" }
-    );
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-
-    const data = (await res.json()) as Partial<ArticlesApiResponse>;
-    if (!data?.success || !Array.isArray(data.articles)) {
-      throw new Error("Invalid articles response");
-    }
-
-    return data.articles.map(mapArticleToNewsArticle);
-  } catch (error) {
-    console.error(
-      "[articles.ts] Failed to fetch published articles from backend API:",
-      error
-    );
-    return null;
-  }
-}
-
-async function getArticleBySlugFromApi(slug: string): Promise<NewsArticle | null> {
-  const apiBaseUrl = getApiBaseUrl();
-  if (!apiBaseUrl) return null;
-
-  try {
-    const res = await fetch(
-      `${apiBaseUrl}/admin/articles?status=PUBLISHED&limit=100`,
-      { cache: "no-store" }
-    );
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-
-    const data = (await res.json()) as Partial<ArticlesApiResponse>;
-    if (!data?.success || !Array.isArray(data.articles)) {
-      throw new Error("Invalid articles response");
-    }
-
-    const article = data.articles.find((item) => item.slug === slug);
-    return article ? mapArticleToNewsArticle(article) : null;
-  } catch (error) {
-    console.error(
-      `[articles.ts] Failed to fetch article "${slug}" from backend API:`,
-      error
-    );
-    return null;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -186,9 +118,6 @@ async function getArticleBySlugFromApi(slug: string): Promise<NewsArticle | null
  * Returns [] and logs the real error if the DB is unreachable.
  */
 export async function getPublishedArticles(): Promise<NewsArticle[]> {
-  const apiArticles = await getPublishedArticlesFromApi();
-  if (apiArticles) return apiArticles;
-
   try {
     const rows = await prisma.article.findMany({
       where: {
@@ -208,6 +137,50 @@ export async function getPublishedArticles(): Promise<NewsArticle[]> {
     // Do NOT silently swallow this error or return mock articles.
     console.error(
       "[articles.ts] ❌ Failed to fetch published articles from PostgreSQL:",
+      error
+    );
+    return [];
+  }
+}
+
+/**
+ * Fetches PUBLISHED articles specifically for a given country (by country ID / slug)
+ * using a database-level filtered query in PostgreSQL instead of loading all articles into memory.
+ *
+ * Matches articles where:
+ *   - primaryCountryId = countryId
+ *   OR
+ *   - countries (ArticleCountry relation) contains countryId
+ */
+export async function getPublishedArticlesByCountry(
+  countryId: string,
+  limit?: number
+): Promise<NewsArticle[]> {
+  try {
+    const rows = await prisma.article.findMany({
+      where: {
+        status: "PUBLISHED",
+        OR: [
+          { primaryCountryId: countryId },
+          { countries: { some: { countryId } } },
+        ],
+      },
+      include: {
+        primaryCountry: true,
+        countries: {
+          include: { country: true },
+        },
+      },
+      orderBy: {
+        publishedAt: "desc",
+      },
+      ...(limit ? { take: limit } : {}),
+    });
+
+    return rows.map(mapArticleToNewsArticle);
+  } catch (error) {
+    console.error(
+      `[articles.ts] ❌ Failed to fetch published articles for country "${countryId}" from PostgreSQL:`,
       error
     );
     return [];
@@ -263,9 +236,6 @@ export async function getBreakingArticle(): Promise<NewsArticle | null> {
  * Returns null if the article is not found in either source.
  */
 export async function getArticleBySlug(slug: string): Promise<NewsArticle | null> {
-  const apiArticle = await getArticleBySlugFromApi(slug);
-  if (apiArticle) return apiArticle;
-
   try {
     const row = await prisma.article.findFirst({
       where: {
@@ -288,6 +258,103 @@ export async function getArticleBySlug(slug: string): Promise<NewsArticle | null
   }
 }
 
+/**
+ * Returns PUBLISHED articles in the VISA category, mapped to the VisaUpdate
+ * shape used by the /visa page and the homepage VisaUpdatesSection.
+ *
+ * `visaType` has no dedicated column on Article — every row is labelled with
+ * a generic caption. `urgent` reuses the existing `breaking` flag rather than
+ * adding a new schema field for what is functionally the same concept.
+ */
+export async function getPublishedVisaUpdates(limit?: number): Promise<VisaUpdate[]> {
+  try {
+    const rows = await prisma.article.findMany({
+      where: { status: "PUBLISHED", category: "VISA" },
+      include: { primaryCountry: true },
+      orderBy: { publishedAt: "desc" },
+      ...(limit ? { take: limit } : {}),
+    });
+
+    return rows.map((a) => ({
+      id: a.slug,
+      country: a.primaryCountry?.name ?? "Global",
+      flag: a.primaryCountry?.flag ?? "🌐",
+      visaType: "Visa & Immigration Update",
+      headline: a.headline,
+      date: formatPublishedDate(a.publishedAt),
+      urgent: a.breaking,
+    }));
+  } catch (error) {
+    console.error("[articles.ts] ❌ Failed to fetch visa updates from PostgreSQL:", error);
+    return [];
+  }
+}
+
+/**
+ * Returns PUBLISHED articles in the GUIDES category, mapped to the Guide
+ * shape used by the /guides listing page and the homepage GuidesSection.
+ *
+ * All guides share one `category` label ("Guides") — Article has no
+ * sub-category column (SOP/IELTS/etc. from the old mock data), so the
+ * listing page's per-topic grouping is dropped in favour of one flat list.
+ */
+export async function getPublishedGuides(limit?: number): Promise<Guide[]> {
+  try {
+    const rows = await prisma.article.findMany({
+      where: { status: "PUBLISHED", category: "GUIDES" },
+      orderBy: { publishedAt: "desc" },
+      ...(limit ? { take: limit } : {}),
+    });
+
+    return rows.map((a) => ({
+      id: a.slug,
+      category: "Guides",
+      title: a.headline,
+      description: a.summary,
+      readingTime: a.readingTime,
+    }));
+  } catch (error) {
+    console.error("[articles.ts] ❌ Failed to fetch guides from PostgreSQL:", error);
+    return [];
+  }
+}
+
+export interface GuideDetail extends Guide {
+  content: string | null;
+}
+
+export async function getGuideBySlug(slug: string): Promise<GuideDetail | null> {
+  try {
+    const row = await prisma.article.findFirst({
+      where: { slug, status: "PUBLISHED", category: "GUIDES" },
+    });
+    if (!row) return null;
+
+    return {
+      id: row.slug,
+      category: "Guides",
+      title: row.headline,
+      description: row.summary,
+      readingTime: row.readingTime,
+      content: row.content,
+    };
+  } catch (error) {
+    console.error(`[articles.ts] ❌ Failed to fetch guide "${slug}" from PostgreSQL:`, error);
+    return null;
+  }
+}
+/** Returns the number of PUBLISHED articles created within the requested window. */
+export async function getRecentArticleCount(days: number): Promise<number> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  try {
+    return await prisma.article.count({
+      where: { status: "PUBLISHED", publishedAt: { gte: since } },
+    });
+  } catch (error) {
+    console.error("[articles.ts] ❌ Failed to count recent articles from PostgreSQL:", error);
+    return 0;
+  }
+}
 // ---------------------------------------------------------------------------
 // Admin preview fetcher — returns any status article with full raw fields
 // ---------------------------------------------------------------------------
@@ -332,6 +399,41 @@ export async function getArticleBySlugForAdmin(slug: string): Promise<AdminArtic
   } catch (error) {
     console.error(
       `[articles.ts] ❌ Admin lookup failed for slug "${slug}":`,
+      error
+    );
+    return null;
+  }
+}
+
+/**
+ * Renders a draft (or any non-published status) for a reviewer who has a
+ * share link but no login — the token must match the row's live
+ * `previewToken` and not be past `previewExpiresAt`. A fresh token is issued
+ * every time a notification email goes out (see `email.service.js`), so an
+ * old link stops working the moment a newer one is sent, not just on expiry.
+ */
+export async function getArticleByPreviewToken(
+  slug: string,
+  token: string
+): Promise<AdminArticleRaw | null> {
+  if (!token) return null;
+  try {
+    const row = await prisma.article.findFirst({
+      where: {
+        slug,
+        previewToken: token,
+        previewExpiresAt: { gt: new Date() },
+      },
+      include: {
+        primaryCountry: true,
+        countries: { include: { country: true } },
+      },
+    });
+    if (!row) return null;
+    return row as AdminArticleRaw;
+  } catch (error) {
+    console.error(
+      `[articles.ts] ❌ Preview token lookup failed for slug "${slug}":`,
       error
     );
     return null;

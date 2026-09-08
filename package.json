@@ -5,15 +5,40 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "backend": "node --watch backend/src/server.js",
+    "backend": "node --import tsx --watch backend/src/server.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --import ./tests/setup.mjs --test --test-concurrency=1 \"tests/**/*.test.js\"",
+    "test:auth": "node --import tsx --import ./tests/setup.mjs --test --test-concurrency=1 \"tests/auth/**/*.test.js\"",
+    "test:api": "node --import tsx --import ./tests/setup.mjs --test --test-concurrency=1 \"tests/api/**/*.test.js\"",
     "db:seed": "prisma db seed",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:import": "tsx prisma/import-programs.ts",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:preflight:duplicates": "tsx prisma/preflight-duplicates.ts",
+    "lint:baseline": "node scripts/lint-baseline.mjs",
+    "lint:baseline:update": "node scripts/lint-baseline.mjs --update",
+    "start:api": "node backend/src/server.js",
+    "worker": "node --import tsx backend/src/worker/index.js",
+    "db:rollout": "node scripts/rollout.mjs",
+    "db:rollout:apply": "node scripts/rollout.mjs --apply",
+    "verify:sources": "tsx backend/src/modules/ingestion/config/verifySources.ts",
+    "verify:editorial": "tsx backend/src/modules/ingestion/validation/verifyEditorial.ts",
+    "verify:completeness": "tsx backend/src/modules/ingestion/validation/verifySourceCompleteness.ts",
+    "test:ingestion": "tsx --test \"backend/src/modules/ingestion/__tests__/*.test.ts\""
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "overridesRationale": {
+    "deepmerge-ts": "GHSA-ggr8-5vv4-36mx (high): stack exhaustion in deepmerge-ts <8.0.0. Reached only via prisma -> @prisma/config, which uses it to load prisma.config.ts at CLI/build time, not in request-serving code. @prisma/config still pins 7.1.5 as of 7.10.0, so no Prisma upgrade resolves it; npm's suggested remedy is a downgrade to prisma@6.12.0, which we reject. Pinning the patched release directly instead. Remove this override once @prisma/config depends on deepmerge-ts >=8."
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
@@ -23,18 +48,21 @@
     "clsx": "^2.1.1",
     "cors": "^2.8.6",
     "country-flag-icons": "^1.6.20",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
     "fast-xml-parser": "^5.10.1",
-    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.31.0",
-    "mongoose": "^9.9.2",
     "next": "16.3.0",
+    "nodemailer": "^10.0.0",
     "pg": "^8.23.0",
+    "pg-boss": "^12.29.0",
     "prisma": "^7.9.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "tailwind-merge": "^3.6.0",
-    "tw-animate-css": "^1.4.0"
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

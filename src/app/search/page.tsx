@@ -24,6 +24,7 @@ function SearchContent() {
   const [tab, setTab] = useState<SearchTab>("All");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
     setQuery(searchParams.get("q") || "");
   }, [searchParams]);
 

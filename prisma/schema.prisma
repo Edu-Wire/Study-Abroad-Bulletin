@@ -31,6 +31,7 @@ enum ArticleCategory {
   VISA
   STUDENT_LIFE
   CAREER
+  GUIDES
 }
 
 enum ArticleStatus {
@@ -85,6 +86,53 @@ model User {
   lastLogin DateTime?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+
+  // Password lifecycle — invited staff must set their own password before access
+  mustChangePassword Boolean @default(false)
+
+  // Relations
+  studentProfile StudentProfile?
+  sessions       UserSession[]
+}
+
+// ============================================================
+// OPAQUE SESSIONS
+// ============================================================
+
+/// Server-side session store. The browser only ever holds the raw opaque
+/// token in a host-only HttpOnly cookie; only its HMAC-SHA-256 hash is
+/// persisted here, so a database disclosure cannot be replayed as a session.
+model UserSession {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+// ============================================================
+// STUDENT PROFILES & PREFERENCES
+// ============================================================
+
+model StudentProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetCountries String[] // Array of country IDs, e.g. ["canada", "uk", "germany"]
+  studyLevel      String? // "Bachelors" | "Masters" | "PhD" | "Diploma"
+  degree          String? // e.g. "Computer Science"
+  branch          String? // e.g. "Artificial Intelligence"
+  preferredIntake String? // e.g. "Fall 2027"
+  budgetRange     String? // e.g. "$20,000 - $35,000"
+  interests       String[] // e.g. ["SCHOLARSHIPS", "VISA", "ADMISSIONS"]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 // ============================================================
@@ -94,24 +142,25 @@ model User {
 model Country {
   id                String   @id // e.g. "canada", "uk", "usa", "australia", "germany", "ireland", "netherlands", "france"
   name              String   @unique
-  code              String   // e.g. "CA", "GB", "US", "AU", "DE", "IE", "NL", "FR"
-  flag              String   // Emoji e.g. "🇨🇦"
+  code              String // e.g. "CA", "GB", "US", "AU", "DE", "IE", "NL", "FR"
+  flag              String // Emoji e.g. "🇨🇦"
   universitiesCount Int      @default(0)
-  averageTuition    String   // e.g. "CAD 28,500 / yr"
-  popularIntake     String   // e.g. "September"
+  averageTuition    String // e.g. "CAD 28,500 / yr"
+  popularIntake     String // e.g. "September"
   updatesCount      Int      @default(0)
   heroImage         String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   // Relations
-  universities         University[]
-  articles             ArticleCountry[]
-  primaryArticles      Article[]                 @relation("PrimaryCountry")
-  scholarships         ScholarshipHostCountry[]
-  immigrationDeadlines ImmigrationDeadline[]
-  rssSources           RSSSource[]
-  consultantsHQ        Consultant[]              @relation("ConsultantHQ")
+  universities           University[]
+  articles               ArticleCountry[]
+  primaryArticles        Article[]                @relation("PrimaryCountry")
+  scholarships           ScholarshipHostCountry[]
+  immigrationDeadlines   ImmigrationDeadline[]
+  rssSources             RSSSource[]
+  contentSources         ContentSource[]
+  consultantsHQ          Consultant[]             @relation("ConsultantHQ")
   consultantDestinations ConsultantDestination[]
 }
 
@@ -120,32 +169,44 @@ model Country {
 // ============================================================
 
 model Article {
-  id               String          @id @default(cuid())
-  slug             String          @unique
-  headline         String
-  summary          String          @db.Text
-  content          String?         @db.Text
-  category         ArticleCategory
-  readingTime      String          @default("4 min read")
-  image            String?
-  status           ArticleStatus   @default(DRAFT)
-  breaking         Boolean         @default(false)
-  featured         Boolean         @default(false)
-  isRss            Boolean         @default(false)
-  sourceUrl        String?
-  sourceName       String?
-  publishedAt      DateTime        @default(now())
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id          String          @id @default(cuid())
+  slug        String          @unique
+  headline    String
+  summary     String          @db.Text
+  content     String?         @db.Text
+  category    ArticleCategory
+  readingTime String          @default("4 min read")
+  image       String?
+  status      ArticleStatus   @default(DRAFT)
+  breaking    Boolean         @default(false)
+  featured    Boolean         @default(false)
+  isRss       Boolean         @default(false)
+  sourceUrl   String?         @unique
+  sourceName  String?
+  publishedAt DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  /** One-time share link for a draft: valid until previewExpiresAt, regenerated each time it's requested. */
+  previewToken     String?   @unique
+  previewExpiresAt DateTime?
 
   // Country Relations
   primaryCountryId String?
-  primaryCountry   Country?        @relation("PrimaryCountry", fields: [primaryCountryId], references: [id])
+  primaryCountry   Country?         @relation("PrimaryCountry", fields: [primaryCountryId], references: [id])
   countries        ArticleCountry[]
 
   // RSS Relation
-  rssSourceId      String?
-  rssSource        RSSSource?      @relation(fields: [rssSourceId], references: [id])
+  rssSourceId String?
+  rssSource   RSSSource? @relation(fields: [rssSourceId], references: [id])
+
+  // Ingestion Relations
+  sourceLinks ArticleSourceLink[]
+  candidates  ArticleCandidate[]
+
+  @@index([status, publishedAt])
+  @@index([primaryCountryId, publishedAt])
+  @@index([rssSourceId])
 }
 
 model ArticleCountry {
@@ -163,6 +224,7 @@ model ArticleCountry {
 
 model University {
   id           String   @id @default(cuid())
+  sourceId     Int?     @unique // scraped "UniversityId" — used for upsert/dedup on re-import
   slug         String   @unique
   name         String
   initials     String
@@ -180,16 +242,28 @@ model University {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Additional ranking & profile fields
+  qsRanking                           Int?
+  usNewsRanking                       Int?
+  webomatricsNationalRanking          Int?
+  webomatricsWorldRanking             Int?
+  universityLogoExtension             String?
+  universityAverageScholarship        Decimal?
+  universityAverageScholarshipRemarks String?
+
   // Relations
   intakes             UniversityIntake[]
   awardedScholarships Scholarship[]
+  programs            Program[]
+
+  @@index([countryId])
 }
 
 model UniversityIntake {
   id                  String     @id @default(cuid())
   universityId        String
   university          University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  term                String     // e.g. "Fall 2027", "Winter 2027", "Semester 1"
+  term                String // e.g. "Fall 2027", "Winter 2027", "Semester 1"
   applicationDeadline DateTime?
   documentDeadline    DateTime?
   depositDeadline     DateTime?
@@ -197,6 +271,141 @@ model UniversityIntake {
   status              String     @default("Open") // "Open", "Closing Soon", "Closed"
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+
+  @@unique([universityId, term])
+}
+
+// ============================================================
+// PROGRAMS
+// ============================================================
+
+model Program {
+  id       String @id @default(cuid())
+  sourceId Int    @unique // scraped "Id" — used for upsert/dedup on re-scrape
+
+  universityId String
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+
+  // Identity
+  name                     String
+  concentration            String?
+  studyLevelId             Int?
+  studyLevel               String? // "Studylvl"
+  categoryId               String?
+  subCategoryId            String?
+  isStemCourse             Boolean?
+  isOnlineCourse           Boolean?
+  isExtraChoicesOfPrograms Boolean?
+  highlights               String?
+  universityOrder          Int?
+
+  // Duration & location
+  durationMonths    Int? // "Duration"
+  campus            String?
+  countryId         Int? // "CountryId" — source's numeric id, not the Country relation
+  cohortCountryCode String?
+
+  // Fees
+  amount                 Decimal? // "Amount"
+  tuitionFeeText         String? // "TutionFee" raw text
+  currencyCode           String?
+  currency               String?
+  tuitionFeeCurrency     String?
+  applicationFee         String?
+  applicationFeeAmt      Decimal?
+  applicationFeeCurrency String?
+  appFeeWaiverAvailable  Boolean?
+  depositCurrency        String?
+  depositSortAmount      Decimal?
+  courseDeposit          Json? // nested deposit object kept as-is
+  universityDeposit      Json? // nested deposit object kept as-is
+
+  // Intakes & deadlines
+  intakes                    String[] // "Intakes" parsed to array
+  displayIntakes             String[]
+  applicationDeadline        String?
+  applicationDeadlineDetails String?
+  intakesAndDeadlines        String?
+  upcomingIntakeDeadLines    String?
+  intakesClosed              String?
+  applicationMode            String?
+  applicationCount12Mo       Int?
+
+  // English & standardised tests
+  ieltsOverall              Float?
+  ieltsNoBandLessThan       Float?
+  ieltsRequired             Boolean?
+  ieltsWaiverScoreCBSE      Float?
+  ieltsWaiverScoreState     Float?
+  pteScore                  Int?
+  pteNoSectionLessThan      Int?
+  pteRequired               Boolean?
+  toeflScore                Int?
+  toeflNoSectionLessThan    Int?
+  toeflRequired             Boolean?
+  detScore                  Int?
+  detRequired               Boolean?
+  greScore                  Int?
+  greRequired               Boolean?
+  gmatScore                 Int?
+  gmatRequired              Boolean?
+  satScore                  Int?
+  satRequired               Boolean?
+  actScore                  Int?
+  actRequired               Boolean?
+  withoutEnglishProficiency Boolean?
+  englishMarks12Score       Float?
+  isMOIWaiver               Boolean?
+  elpAvailable              Boolean?
+  eslAvailable              Boolean?
+  eslElpDetail              String?
+
+  // Entry requirements
+  entryRequirement                String?
+  entryRequirementTwelfth         String?
+  entryRequirementTwelfthOutOf100 String?
+  entryRequirementTwelfthOutOf45  String?
+  entryRequirementTwelfthOutOf10  String?
+  entryRequirementTwelfthOutOf7   String?
+  entryRequirementTwelfthOutOf5   String?
+  entryRequirementTwelfthOutOf4   String?
+  entryRequirementUG              String?
+  entryRequirementUgOutOf100      String?
+  entryRequirementUgOutOf10       String?
+  entryRequirementUgOutOf7        String?
+  entryRequirementUgOutOf5        String?
+  entryRequirementUgOutOf4        String?
+  withoutMaths                    Boolean?
+  workExp                         String?
+  backlog                         Int?
+  backlogRange                    String?
+  fifteenYearsEducation           Boolean?
+
+  // Scholarship & internship
+  scholarshipAvailable      Boolean?
+  scholarshipDetail         String? // "ScholarshipDeatil" (source spelling preserved)
+  internshipAvailable       Boolean?
+  averageScholarship        Decimal?
+  averageScholarshipRemarks String?
+
+  // Eligibility (source agent-network eligibility ids, kept as-is)
+  eligibleCountryIds             Int[]
+  eligibleCountryIdStudyLevelIds String[]
+  eligibleStateIds               Int[]
+
+  // Commission (source internal agent-commission data, kept as-is)
+  commissionAmount         Decimal?
+  commissionMode           String?
+  commissionCurrency       String?
+  commissionToolTipMessage String?
+  increasedCommissions     Json?
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([universityId])
 }
 
 // ============================================================
@@ -204,25 +413,25 @@ model UniversityIntake {
 // ============================================================
 
 model Scholarship {
-  id             String                   @id @default(cuid())
-  slug           String                   @unique
+  id             String          @id @default(cuid())
+  slug           String          @unique
   name           String
   organization   String
   funding        String
   degree         String
   deadline       DateTime?
-  deadlineString String                   // e.g. "30 September 2026"
-  eligibility    String                   @db.Text
+  deadlineString String // e.g. "30 September 2026"
+  eligibility    String          @db.Text
   type           ScholarshipType
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   // Optional University link
-  universityId   String?
-  university     University?              @relation(fields: [universityId], references: [id])
+  universityId String?
+  university   University? @relation(fields: [universityId], references: [id])
 
   // Multi-country destinations
-  destinations   ScholarshipHostCountry[]
+  destinations ScholarshipHostCountry[]
 }
 
 model ScholarshipHostCountry {
@@ -258,6 +467,8 @@ model ImmigrationDeadline {
   content             String?                 @db.Text
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
+
+  @@index([countryId, deadlineDate])
 }
 
 // ============================================================
@@ -267,7 +478,7 @@ model ImmigrationDeadline {
 model RSSSource {
   id             String          @id // e.g. "ircc-canada", "ukvi"
   name           String
-  countryId      String?         // Nullable for multi-country / global sources
+  countryId      String? // Nullable for multi-country / global sources
   country        Country?        @relation(fields: [countryId], references: [id])
   category       ArticleCategory @default(VISA)
   sourceType     String          @default("government") // "government" | "university" | "news"
@@ -279,7 +490,7 @@ model RSSSource {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  articles       Article[]
+  articles Article[]
 }
 
 // ============================================================
@@ -287,30 +498,30 @@ model RSSSource {
 // ============================================================
 
 model Consultant {
-  id           String                  @id // e.g. "global-pathways-education"
-  name         String
-  slug         String                  @unique
-  logo         String
-  description  String                  @db.Text
-  countryId    String                  // Headquarter Country
-  country      Country                 @relation("ConsultantHQ", fields: [countryId], references: [id])
-  cities       String[]
-  services     String[]
-  website      String
-  email        String
-  phone        String
-  verified     Boolean                 @default(false)
-  featured     Boolean                 @default(false)
-  rating       Float                   @default(5.0)
-  reviewCount  Int                     @default(0)
-  established  String
-  address      String
-  categories   String[]
-  sponsored    Boolean                 @default(false)
-  lastUpdated  String
-  aboutHtml    String?                 @db.Text
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
+  id          String   @id // e.g. "global-pathways-education"
+  name        String
+  slug        String   @unique
+  logo        String
+  description String   @db.Text
+  countryId   String // Headquarter Country
+  country     Country  @relation("ConsultantHQ", fields: [countryId], references: [id])
+  cities      String[]
+  services    String[]
+  website     String
+  email       String
+  phone       String
+  verified    Boolean  @default(false)
+  featured    Boolean  @default(false)
+  rating      Float    @default(5.0)
+  reviewCount Int      @default(0)
+  established String
+  address     String
+  categories  String[]
+  sponsored   Boolean  @default(false)
+  lastUpdated String
+  aboutHtml   String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   destinations ConsultantDestination[]
 }
@@ -322,4 +533,362 @@ model ConsultantDestination {
   country      Country    @relation(fields: [countryId], references: [id], onDelete: Cascade)
 
   @@id([consultantId, countryId])
+}
+
+// ============================================================
+// INGESTION ENGINE ENUMS
+// ============================================================
+
+enum SourceType {
+  API
+  ATOM
+  RSS
+  WEB
+  WATCH
+  DATA
+}
+
+enum SourceHealthStatus {
+  HEALTHY
+  DEGRADED
+  STALE
+  BROKEN
+  RATE_LIMITED
+}
+
+enum SourceRunType {
+  LIVE
+  BACKFILL
+  RECONCILE
+  MANUAL
+}
+
+enum SourceRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+enum ProcessingStatus {
+  DISCOVERED
+  DETAIL_PENDING
+  ENRICHED
+  NORMALIZED
+  VERSIONED
+  SCORED
+  CLASSIFIED
+  ROUTED
+  IMPORTED
+  PUBLISHED
+}
+
+enum RoutingDecision {
+  IGNORE
+  REVIEW
+  CREATE_DRAFT
+  PUBLISH
+}
+
+enum CandidateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  AUTO_DRAFTED
+  DRAFT_CREATED
+  IGNORED
+}
+
+enum SourceLinkType {
+  PRIMARY_SOURCE
+  REFERENCE
+  CORROBORATING
+}
+
+enum BackfillStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  PAUSED
+}
+
+enum WindowStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ============================================================
+// INGESTION ENGINE MODELS
+// ============================================================
+
+model ContentSource {
+  id             String           @id @default(cuid())
+  code           String           @unique // e.g. "CA_IRCC_ATOM", "UK_GOVUK_SEARCH"
+  name           String
+  countryId      String?
+  country        Country?         @relation(fields: [countryId], references: [id])
+  sourceType     SourceType       @default(RSS)
+  baseUrl        String
+  feedUrl        String?
+  enabled        Boolean          @default(true)
+  disabledReason String?          @db.Text
+  config         Json?
+  schedule       String? // cron or interval string
+  categoryHint   ArticleCategory?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  syncState    SourceSyncState?
+  runs         SourceRun[]
+  items        SourceItem[]
+  backfillRuns BackfillRun[]
+
+  @@index([countryId])
+  @@index([sourceType, enabled])
+}
+
+model SourceSyncState {
+  id                  String             @id @default(cuid())
+  contentSourceId     String             @unique
+  contentSource       ContentSource      @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  cursor              String?
+  watermark           DateTime?
+  etag                String?
+  lastModified        String?
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  lastErrorMessage    String?            @db.Text
+  consecutiveFailures Int                @default(0)
+  healthStatus        SourceHealthStatus @default(HEALTHY)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model SourceRun {
+  id              String          @id @default(cuid())
+  contentSourceId String
+  contentSource   ContentSource   @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  runType         SourceRunType   @default(LIVE)
+  status          SourceRunStatus @default(RUNNING)
+  startedAt       DateTime        @default(now())
+  finishedAt      DateTime?
+  itemsFound      Int             @default(0)
+  itemsCreated    Int             @default(0)
+  itemsUpdated    Int             @default(0)
+  itemsFailed     Int             @default(0)
+  errorMessage    String?         @db.Text
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+
+  @@index([contentSourceId, startedAt, status])
+}
+
+model SourceItem {
+  id               String           @id @default(cuid())
+  contentSourceId  String
+  contentSource    ContentSource    @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  externalId       String?
+  canonicalUrl     String
+  canonicalUrlHash String
+  title            String
+  summary          String?          @db.Text
+  publishedAt      DateTime?
+  // Hash of (title + summary + publishedAt) as seen at discovery time. Lets a
+  // later discovery run skip re-enqueueing the expensive detail fetch when a
+  // feed/listing item comes back byte-for-byte the same as last time. Never
+  // used for CHANGE_WATCH sources, whose discovery payload is static config,
+  // not page content — a hash of that would never change and would silently
+  // stop them from ever being re-checked.
+  discoveryHash    String?
+  discoveredAt     DateTime         @default(now())
+  processingStatus ProcessingStatus @default(DISCOVERED)
+  countryId        String?
+  language         String?          @default("en")
+  nativeTopics     String[]
+  rawMetadata      Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  versions     SourceDocumentVersion[]
+  assessments  AiAssessment[]
+  candidate    ArticleCandidate?
+  articleLinks ArticleSourceLink[]
+
+  @@unique([contentSourceId, externalId])
+  @@unique([contentSourceId, canonicalUrlHash])
+  @@index([publishedAt])
+  @@index([countryId, contentSourceId])
+  @@index([processingStatus])
+}
+
+model SourceDocumentVersion {
+  id            String     @id @default(cuid())
+  sourceItemId  String
+  sourceItem    SourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  contentHash   String
+  rawBody       String?    @db.Text
+  cleanHtml     String?    @db.Text
+  cleanText     String?    @db.Text
+  title         String?
+  authors       String[]
+  versionNumber Int        @default(1)
+  httpStatus    Int?
+  capturedAt    DateTime   @default(now())
+
+  // Relations
+  diffsFromPrior SourceDiff[]        @relation("PriorVersion")
+  diffsToNext    SourceDiff[]        @relation("NextVersion")
+  assessments    AiAssessment[]
+  articleLinks   ArticleSourceLink[]
+
+  @@unique([sourceItemId, contentHash])
+  @@index([sourceItemId, capturedAt])
+}
+
+model SourceDiff {
+  id             String                @id @default(cuid())
+  sourceItemId   String
+  priorVersionId String
+  priorVersion   SourceDocumentVersion @relation("PriorVersion", fields: [priorVersionId], references: [id], onDelete: Cascade)
+  nextVersionId  String
+  nextVersion    SourceDocumentVersion @relation("NextVersion", fields: [nextVersionId], references: [id], onDelete: Cascade)
+  isMaterial     Boolean               @default(false)
+  changeSummary  String?               @db.Text
+  addedTokens    Int                   @default(0)
+  removedTokens  Int                   @default(0)
+  patch          String?               @db.Text
+  detectedAt     DateTime              @default(now())
+
+  @@index([sourceItemId, detectedAt])
+}
+
+model AiAssessment {
+  id                String                 @id @default(cuid())
+  sourceItemId      String
+  sourceItem        SourceItem             @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  versionId         String?
+  version           SourceDocumentVersion? @relation(fields: [versionId], references: [id])
+  relevanceScore    Float
+  confidenceScore   Float
+  urgency           String?
+  internalCategory  String
+  suggestedCategory ArticleCategory?
+  routingDecision   RoutingDecision        @default(REVIEW)
+  suggestedHeadline String?
+  suggestedSummary  String?                @db.Text
+  suggestedContent  String?                @db.Text
+  keyTakeaways      String[]
+  targetAudience    String[]
+  model             String
+  promptVersion     String
+  rawOutput         Json?
+  createdAt         DateTime               @default(now())
+
+  // Relations
+  candidate ArticleCandidate?
+
+  @@index([sourceItemId, createdAt])
+  @@index([routingDecision])
+}
+
+model ArticleCandidate {
+  id               String          @id @default(cuid())
+  sourceItemId     String          @unique
+  sourceItem       SourceItem      @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  aiAssessmentId   String?         @unique
+  aiAssessment     AiAssessment?   @relation(fields: [aiAssessmentId], references: [id])
+  headline         String
+  summary          String          @db.Text
+  content          String?         @db.Text
+  category         ArticleCategory @default(VISA)
+  primaryCountryId String?
+  confidence       Float           @default(0.0)
+  status           CandidateStatus @default(PENDING)
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+  articleId        String?
+  article          Article?        @relation(fields: [articleId], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([status, createdAt])
+  @@index([primaryCountryId])
+}
+
+model ArticleSourceLink {
+  id           String                 @id @default(cuid())
+  articleId    String
+  article      Article                @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  sourceItemId String
+  sourceItem   SourceItem             @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  versionId    String?
+  version      SourceDocumentVersion? @relation(fields: [versionId], references: [id])
+  linkType     SourceLinkType         @default(PRIMARY_SOURCE)
+  createdAt    DateTime               @default(now())
+
+  @@unique([articleId, sourceItemId])
+  @@index([sourceItemId])
+}
+
+model BackfillRun {
+  id               String         @id @default(cuid())
+  contentSourceId  String
+  contentSource    ContentSource  @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  startDate        DateTime
+  endDate          DateTime
+  status           BackfillStatus @default(PENDING)
+  totalWindows     Int            @default(0)
+  completedWindows Int            @default(0)
+  failedWindows    Int            @default(0)
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  config           Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relations
+  windows BackfillWindow[]
+
+  @@index([contentSourceId, status])
+}
+
+model BackfillWindow {
+  id            String       @id @default(cuid())
+  backfillRunId String
+  backfillRun   BackfillRun  @relation(fields: [backfillRunId], references: [id], onDelete: Cascade)
+  windowStart   DateTime
+  windowEnd     DateTime
+  cursor        String?
+  pageNumber    Int?
+  status        WindowStatus @default(PENDING)
+  itemsFound    Int          @default(0)
+  attempts      Int          @default(0)
+  lastError     String?      @db.Text
+  completedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([backfillRunId, windowStart, windowEnd])
+  @@index([backfillRunId, status])
+}
+
+// ============================================================
+// SITE SETTINGS (singleton row)
+// ============================================================
+
+model SiteSettings {
+  id                     String   @id @default("singleton")
+  platformName           String
+  tagline                String
+  contactEmail           String
+  timezone               String
+  /** Where new-draft notification emails are sent. */
+  draftNotificationEmail String   @default("info@digi-wire.com")
+  updatedAt              DateTime @updatedAt
 }

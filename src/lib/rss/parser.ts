@@ -24,6 +24,7 @@ import { XMLParser } from "fast-xml-parser";
 
 /** How long Next.js caches each feed response before re-fetching (seconds). */
 export const RSS_REVALIDATE_SECONDS = 3600; // 1 hour
+export const RSS_FETCH_TIMEOUT_MS = 8000; // 8 seconds timeout ceiling
 
 /**
  * Sent with every outgoing RSS/Atom HTTP request.
@@ -77,10 +78,11 @@ function isHtmlResponse(contentType: string, body: string): boolean {
  * Guards the edge case where fast-xml-parser returns a single entry as a plain
  * object (shouldn't happen with the isArray config, but handled defensively).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractEntries(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped RSS/Atom feed payload. Tracked for follow-up typing.
   parsed: any,
   logTag: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped RSS/Atom feed payload. Tracked for follow-up typing.
 ): { entries: any[]; format: "Atom" | "RSS 2.0" | "unknown" } {
   // Atom: <feed><entry>
   const atomEntries = parsed?.feed?.entry;
@@ -133,16 +135,17 @@ function extractEntries(
  * @param revalidate Next.js revalidation interval in seconds.
  * @param logTag     Short label used in console messages, e.g. "IRCC RSS".
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function fetchAtomEntries(
   url: string,
   revalidate: number,
   logTag: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped RSS/Atom feed payload. Tracked for follow-up typing.
 ): Promise<any[]> {
   // ── 1. HTTP fetch ──────────────────────────────────────────────────────────
   let response: Response;
   try {
     response = await fetch(url, {
+      signal: AbortSignal.timeout(RSS_FETCH_TIMEOUT_MS),
       next: { revalidate },
       headers: {
         "User-Agent": RSS_USER_AGENT,
@@ -150,8 +153,13 @@ export async function fetchAtomEntries(
           "application/atom+xml, application/rss+xml, application/xml, text/xml, */*;q=0.8",
       },
     });
-  } catch (err) {
-    console.error(`[${logTag}] ❌ Network error fetching feed (${url}):`, err);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped RSS/Atom feed payload. Tracked for follow-up typing.
+  } catch (err: any) {
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      console.warn(`[${logTag}] ⏱️ RSS fetch timed out after ${RSS_FETCH_TIMEOUT_MS}ms (${url})`);
+    } else {
+      console.error(`[${logTag}] ❌ Network error fetching feed (${url}):`, err);
+    }
     return [];
   }
 

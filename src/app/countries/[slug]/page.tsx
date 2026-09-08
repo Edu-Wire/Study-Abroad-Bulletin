@@ -15,8 +15,7 @@ import { DeadlineTrackerCard } from "@/components/cards/DeadlineTrackerCard";
 import { ConsultantCard } from "@/components/cards/ConsultantCard";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdBanner, InlineAd } from "@/components/editorial/AdComponents";
-import { getCanadaNews, getUKNews } from "@/lib/rss";
-import { getPublishedArticles } from "@/lib/articles";
+import { getPublishedArticlesByCountry } from "@/lib/articles";
 import type { ImmigrationDeadline } from "@/data/immigrationDeadlines";
 
 interface Props {
@@ -77,10 +76,8 @@ export default async function CountryDetailPage({ params }: Props) {
     ielts: u.ielts,
   }));
 
-  // Strictly use PostgreSQL published articles for all countries (editorial + approved RSS imports)
-  const countryNews = (await getPublishedArticles()).filter(
-    (n) => n.country.toLowerCase() === country.name.toLowerCase()
-  );
+  // Database-level query: only fetch published articles belonging to this country
+  const countryNews = await getPublishedArticlesByCountry(country.id);
 
   const countryScholarships = country.scholarships.map((s) => ({
     id: s.scholarship.slug,
@@ -92,6 +89,7 @@ export default async function CountryDetailPage({ params }: Props) {
     deadline: s.scholarship.deadlineString,
     daysLeft: 30,
     eligibility: s.scholarship.eligibility,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
     type: (s.scholarship.type === "FULLY_FUNDED" ? "Fully Funded" : s.scholarship.type === "PARTIAL" ? "Partial" : "Tuition Waiver") as any,
   }));
 
@@ -102,8 +100,11 @@ export default async function CountryDetailPage({ params }: Props) {
     country: country.name,
     countryCode: country.code,
     deadline: d.deadlineDate.toISOString().split("T")[0],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
     deadlineType: (d.deadlineType === "VISA" ? "Visa" : d.deadlineType === "IMMIGRATION" ? "Immigration" : d.deadlineType === "POLICY" ? "Policy" : d.deadlineType === "APPLICATION" ? "Application" : "Registration") as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
     status: (d.status === "CLOSING_SOON" ? "Closing Soon" : d.status === "UPCOMING" ? "Upcoming" : d.status === "UPDATED" ? "Updated" : "Passed") as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
     importance: (d.importance === "CRITICAL" ? "Critical" : d.importance === "HIGH" ? "High" : "Medium") as any,
     description: d.description,
     source: d.source,

@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search, X } from "lucide-react";
 import { SearchWithDropdown } from "@/components/common/SearchWithDropdown";
 import { cn } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/api/auth";
 
 const mainNav = [
   { label: "News", href: "/news" },
@@ -39,14 +40,31 @@ function UtilityBar({
   onSearchClick: () => void;
   searchOpen: boolean;
 }) {
-  const [date, setDate] = useState("");
+  // Rendered after mount only, so the server and client markup agree on a date
+  // that depends on the viewer's clock.
+  const [mounted, setMounted] = useState(false);
+  const date = mounted ? formatEditionDate() : "";
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    setDate(formatEditionDate());
-    if (typeof window !== "undefined") {
-      setIsLoggedIn(!!localStorage.getItem("authToken"));
-    }
+    // The session cookie is HttpOnly, so it cannot be sniffed from JavaScript.
+    // Ask the server instead; this drives presentation only.
+    let cancelled = false;
+
+    getCurrentUser()
+      .then((res) => {
+        if (!cancelled) setIsLoggedIn(Boolean(res.success && res.user));
+      })
+      .catch(() => {
+        if (!cancelled) setIsLoggedIn(false);
+      })
+      .finally(() => {
+        if (!cancelled) setMounted(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -162,10 +180,45 @@ function MobileHeader({
 }
 
 /** Navigation rail — desktop full centered nav. Strictly hidden on mobile to prevent overflow. */
-function NavRail({ pathname }: { pathname: string }) {
+function NavRail({
+  pathname,
+  onSearchClick,
+  searchOpen,
+  scrolled,
+}: {
+  pathname: string;
+  onSearchClick?: () => void;
+  searchOpen?: boolean;
+  scrolled?: boolean;
+}) {
   return (
     <div className="hidden lg:block border-b border-border bg-background">
-      <div className="shell flex items-center justify-center">
+      <div className="shell relative flex items-center justify-center">
+        {/* Compact logo on the left when scrolled (smooth fade-in without layout shift) */}
+        <div
+          className={cn(
+            "absolute left-4 xl:left-8 top-1/2 -translate-y-1/2 transition-all duration-200 hidden lg:block",
+            scrolled
+              ? "opacity-100 pointer-events-auto translate-x-0"
+              : "opacity-0 pointer-events-none -translate-x-2"
+          )}
+        >
+          <Link
+            href="/"
+            aria-label="Abroad Bulletin"
+            className="inline-block transition-transform hover:scale-[1.02]"
+          >
+            <Image
+              src="/logo/logo.png"
+              alt="Abroad Bulletin"
+              width={200}
+              height={42}
+              className="h-7 w-auto object-contain"
+            />
+          </Link>
+        </div>
+
+        {/* Centered navigation items */}
         <nav
           className="flex items-center justify-center"
           aria-label="Main navigation"
@@ -180,7 +233,7 @@ function NavRail({ pathname }: { pathname: string }) {
                 key={item.label}
                 href={item.href}
                 className={cn(
-                  "eyebrow relative shrink-0 px-5 py-3 text-foreground transition-colors hover:text-primary",
+                  "eyebrow relative shrink-0 px-4 xl:px-5 py-3 text-foreground transition-colors hover:text-primary",
                   "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary after:transition-transform after:duration-200",
                   isActive
                     ? "text-primary after:scale-x-100"
@@ -192,6 +245,29 @@ function NavRail({ pathname }: { pathname: string }) {
             );
           })}
         </nav>
+
+        {/* Quick search button on the right when scrolled */}
+        {onSearchClick && (
+          <div
+            className={cn(
+              "absolute right-4 xl:right-8 top-1/2 -translate-y-1/2 transition-all duration-200 hidden lg:block",
+              scrolled
+                ? "opacity-100 pointer-events-auto translate-x-0"
+                : "opacity-0 pointer-events-none translate-x-2"
+            )}
+          >
+            <button
+              type="button"
+              aria-label="Search"
+              aria-expanded={searchOpen}
+              onClick={onSearchClick}
+              className="eyebrow text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1.5 py-1 px-2.5 rounded-md hover:bg-surface"
+            >
+              <Search className="size-3.5" />
+              <span className="hidden xl:inline">Search</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -346,7 +422,7 @@ export function Header() {
   const pathname = usePathname();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    const onScroll = () => setScrolled(window.scrollY > 140);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -358,9 +434,10 @@ export function Header() {
   }, [menuOpen]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
     setMenuOpen(false);
     setSearchOpen(false);
-    setScrolled(window.scrollY > 8);
+    setScrolled(window.scrollY > 140);
   }, [pathname]);
 
   const isAuthPage = pathname.startsWith("/auth/");
@@ -431,48 +508,54 @@ export function Header() {
   }
 
   return (
-    <header className={cn("sticky top-0 z-50 transition-shadow", scrolled && "shadow-[0_1px_0_0_var(--color-border)]")}>
-      {/* 1. Utility bar — desktop only */}
-      <UtilityBar
-        onSearchClick={() => setSearchOpen((o) => !o)}
-        searchOpen={searchOpen}
-      />
-
-      {/* 2. Masthead — desktop only, hidden on scroll */}
-      <div
-        className={cn(
-          "overflow-hidden transition-all duration-300",
-          scrolled ? "max-h-0 opacity-0" : "max-h-52 opacity-100",
-        )}
-      >
+    <>
+      {/* 1. Static publication header (natural document flow, scrolls away naturally) */}
+      <div className="relative bg-background">
+        <UtilityBar
+          onSearchClick={() => setSearchOpen((o) => !o)}
+          searchOpen={searchOpen}
+        />
         <Masthead />
       </div>
 
-      {/* 3. Mobile header bar — logo + icons */}
-      <MobileHeader
-        onSearchClick={() => setSearchOpen((o) => !o)}
-        searchOpen={searchOpen}
-        onMenuClick={() => setMenuOpen(true)}
-      />
+      {/* 2. Sticky navigation bar (fixed height, zero layout shift) */}
+      <header
+        className={cn(
+          "sticky top-0 z-50 bg-background/95 backdrop-blur-md transition-shadow",
+          scrolled && "shadow-sm"
+        )}
+      >
+        {/* Mobile header bar — logo + icons (<lg) */}
+        <MobileHeader
+          onSearchClick={() => setSearchOpen((o) => !o)}
+          searchOpen={searchOpen}
+          onMenuClick={() => setMenuOpen(true)}
+        />
 
-      {/* 4. Navigation rail — desktop full centered nav only (hidden on mobile) */}
-      <NavRail pathname={pathname} />
+        {/* Navigation rail — desktop full centered nav only (hidden on mobile) */}
+        <NavRail
+          pathname={pathname}
+          onSearchClick={() => setSearchOpen((o) => !o)}
+          searchOpen={searchOpen}
+          scrolled={scrolled}
+        />
 
-      {/* Search panel */}
-      {searchOpen && (
-        <div className="border-b border-border bg-background">
-          <div className="shell py-3">
-            <SearchWithDropdown
-              placeholder="Search universities, scholarships, news, countries…"
-              autoFocus
-              onClose={() => setSearchOpen(false)}
-            />
+        {/* Search panel dropdown */}
+        {searchOpen && (
+          <div className="border-b border-border bg-background shadow-md">
+            <div className="shell py-3">
+              <SearchWithDropdown
+                placeholder="Search universities, scholarships, news, countries…"
+                autoFocus
+                onClose={() => setSearchOpen(false)}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </header>
 
       {/* Mobile drawer */}
       <MobileDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
-    </header>
+    </>
   );
 }

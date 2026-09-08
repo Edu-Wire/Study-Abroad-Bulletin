@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_BASE_URL } from "@/lib/api/base-url";
 import {
   Users,
   Shield,
@@ -16,10 +15,15 @@ import {
   AlertCircle,
   AlertTriangle,
   Loader2,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTableContainer } from "@/components/admin/AdminTable";
 import { StatusBadge } from "@/components/admin/StatusBadge";
+import { adminGet, adminPost, adminPatch, adminDelete } from "@/lib/api/apiClient";
 
 interface UserItem {
   id: string;
@@ -46,11 +50,14 @@ export default function AdminUsersPage() {
     role: "EDITOR",
     password: "",
   });
+  const [showInvitePassword, setShowInvitePassword] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<{
     success?: boolean;
     message?: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
+  const [copiedPassword, setCopiedPassword] = useState(false);
 
   // Edit user & password reset modal state
   const [editUser, setEditUser] = useState<UserItem | null>(null);
@@ -61,6 +68,7 @@ export default function AdminUsersPage() {
     status: "ACTIVE",
     password: "",
   });
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [editStatus, setEditStatus] = useState<{
     success?: boolean;
     message?: string;
@@ -74,12 +82,12 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}/admin/users`);
-      const data = await res.json();
+      const data = await adminGet<{ success: boolean; users: UserItem[] }>("/admin/users");
       if (data.success && data.users) {
         setUsers(data.users);
       }
-    } catch (err) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
+    } catch (err: any) {
       console.error("Failed to fetch admin users:", err);
     } finally {
       setLoading(false);
@@ -87,6 +95,7 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing: effect syncs state to route/prop changes. Tracked for follow-up.
     fetchUsers();
   }, []);
 
@@ -119,12 +128,10 @@ export default function AdminUsersPage() {
         payload.password = editForm.password.trim();
       }
 
-      const res = await fetch(`${API_BASE_URL}/admin/users/${editUser.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+      const data = await adminPatch<{ success: boolean; message: string }>(
+        `/admin/users/${editUser.id}`,
+        payload
+      );
       if (data.success) {
         setEditStatus({ success: true, message: data.message });
         fetchUsers();
@@ -138,10 +145,11 @@ export default function AdminUsersPage() {
           message: data.message || "Failed to update user.",
         });
       }
-    } catch {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
+    } catch (err: any) {
       setEditStatus({
         success: false,
-        message: "Could not connect to backend server.",
+        message: err?.message || "Could not connect to backend server.",
       });
     } finally {
       setIsUpdating(false);
@@ -153,18 +161,18 @@ export default function AdminUsersPage() {
     setIsDeleting(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${deleteTarget.id}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
+      const data = await adminDelete<{ success: boolean; message: string }>(
+        `/admin/users/${deleteTarget.id}`
+      );
       if (data.success) {
         setDeleteTarget(null);
         fetchUsers();
       } else {
         alert(data.message || "Failed to delete user.");
       }
-    } catch {
-      alert("Failed to delete user. Server unreachable.");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete user. Server unreachable.");
     } finally {
       setIsDeleting(false);
     }
@@ -176,14 +184,19 @@ export default function AdminUsersPage() {
     setInviteStatus(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/invite`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(inviteForm),
-      });
-      const data = await res.json();
+      const data = await adminPost<{
+        success: boolean;
+        message: string;
+        temporaryPassword?: string | null;
+      }>(
+        "/admin/users/invite",
+        inviteForm
+      );
       if (data.success) {
         setInviteStatus({ success: true, message: data.message });
+        if (data.temporaryPassword) {
+          setCreatedTempPassword(data.temporaryPassword);
+        }
         setInviteForm({
           firstName: "",
           lastName: "",
@@ -192,10 +205,12 @@ export default function AdminUsersPage() {
           password: "",
         });
         fetchUsers();
-        setTimeout(() => {
-          setIsInviteModalOpen(false);
-          setInviteStatus(null);
-        }, 1100);
+        if (!data.temporaryPassword) {
+          setTimeout(() => {
+            setIsInviteModalOpen(false);
+            setInviteStatus(null);
+          }, 1100);
+        }
       } else {
         setInviteStatus({
           success: false,
@@ -518,15 +533,27 @@ export default function AdminUsersPage() {
                 <p className="text-[11px] text-slate-500 mb-2">
                   Leave blank to preserve current password.
                 </p>
-                <input
-                  type="password"
-                  placeholder="Enter new password (e.g. editor@123)"
-                  value={editForm.password}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, password: e.target.value })
-                  }
-                  className="w-full h-8.5 px-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
-                />
+                <div className="relative">
+                  <input
+                    type={showEditPassword ? "text" : "password"}
+                    placeholder="Enter new password (e.g. editor@123)"
+                    value={editForm.password}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, password: e.target.value })
+                    }
+                    className="w-full h-8.5 pl-3 pr-9 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword((prev) => !prev)}
+                    className="absolute right-0 top-0 flex h-8.5 w-8.5 items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                    aria-label={showEditPassword ? "Hide password" : "Show password"}
+                    title={showEditPassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showEditPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200/80">
@@ -657,36 +684,85 @@ export default function AdminUsersPage() {
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Initial Password (Optional)
+                <label className="font-semibold text-slate-700 block mb-0.5">
+                  Password (Optional)
                 </label>
-                <input
-                  type="password"
-                  placeholder="Default: Staff@123456"
-                  value={inviteForm.password}
-                  onChange={(e) =>
-                    setInviteForm({ ...inviteForm, password: e.target.value })
-                  }
-                  className="w-full h-8.5 px-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
-                />
+                <p className="text-[11px] text-slate-500 mb-1.5">
+                  Leave blank to auto-generate a secure 12-character temporary password.
+                </p>
+                <div className="relative">
+                  <input
+                    type={showInvitePassword ? "text" : "password"}
+                    placeholder="Min. 8 characters or leave blank"
+                    value={inviteForm.password}
+                    onChange={(e) =>
+                      setInviteForm({ ...inviteForm, password: e.target.value })
+                    }
+                    className="w-full h-8.5 pl-3 pr-9 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowInvitePassword((prev) => !prev)}
+                    className="absolute right-0 top-0 flex h-8.5 w-8.5 items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                    aria-label={showInvitePassword ? "Hide password" : "Show password"}
+                    title={showInvitePassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showInvitePassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </div>
+
+              {createdTempPassword && (
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-lg space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                      Temporary Password Generated
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdTempPassword);
+                        setCopiedPassword(true);
+                        setTimeout(() => setCopiedPassword(false), 2000);
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded cursor-pointer transition-colors"
+                    >
+                      {copiedPassword ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      <span>{copiedPassword ? "Copied!" : "Copy Password"}</span>
+                    </button>
+                  </div>
+                  <code className="block text-xs font-mono font-bold text-emerald-900 bg-white/80 px-2.5 py-1.5 rounded border border-emerald-200/60 select-all">
+                    {createdTempPassword}
+                  </code>
+                  <p className="text-[10.5px] text-emerald-700">
+                    Copy and share this temporary password with the staff member.
+                  </p>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200/80">
                 <button
                   type="button"
-                  onClick={() => setIsInviteModalOpen(false)}
+                  onClick={() => {
+                    setIsInviteModalOpen(false);
+                    setCreatedTempPassword(null);
+                    setInviteStatus(null);
+                  }}
                   className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {createdTempPassword ? "Done" : "Cancel"}
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#1769E0] hover:bg-[#1357bd] rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
-                >
-                  {isSubmitting && <Loader2 className="h-3 w-3 animate-spin" />}
-                  {isSubmitting ? "Inviting..." : "Create Account"}
-                </button>
+                {!createdTempPassword && (
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-[#1769E0] hover:bg-[#1357bd] rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    {isSubmitting && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {isSubmitting ? "Inviting..." : "Create Account"}
+                  </button>
+                )}
               </div>
             </form>
           </div>

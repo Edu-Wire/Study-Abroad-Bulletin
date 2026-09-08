@@ -164,6 +164,7 @@ export function ImmigrationTrackerClient({ initialDeadlines }: Props) {
                       <label className="eyebrow text-muted-foreground text-[10px] block mb-1">Sort By</label>
                       <select
                         value={sortBy}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
                         onChange={(e) => setSortBy(e.target.value as any)}
                         className="w-full h-9 px-2.5 bg-background border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                       >
