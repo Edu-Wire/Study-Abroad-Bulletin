@@ -19,7 +19,8 @@ those requests onward. Two consequences shape everything below:
   roles. The Next.js proxy performs only an optimistic cookie-presence redirect
   and makes no authorization decision.
 
-Components: a Next.js frontend, a Node/Express API behind an HTTPS reverse
+Components: a Next.js frontend on **AWS Amplify Hosting** (behind CloudFront),
+a Node/Express API on an **AWS Lightsail** instance behind an HTTPS reverse
 proxy, managed PostgreSQL, and a process manager on the API host.
 
 ## Environment variables
@@ -123,8 +124,37 @@ deliberate action.
 
 ## Frontend deployment
 
-The frontend builds and deploys from your Git host's CI/CD integration on push
-to the release branch.
+The frontend deploys via **AWS Amplify Hosting**, connected directly to this
+GitHub repo. Amplify watches the connected branch and builds automatically on
+push, using the build spec checked into the repo at [`amplify.yml`](amplify.yml):
+
+```yaml
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - nvm use 20
+        - npm ci
+        - npx prisma generate
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
+```
+
+`npx prisma generate` runs in `preBuild`, so a schema change needs no extra
+step here — it's picked up automatically on the next build. If you need to
+override anything for a specific branch (e.g. a preview environment), that's
+still done per-branch in the Amplify Console under **App settings → Build
+settings**, but the base spec lives in git.
 
 ```bash
 git add .
@@ -132,13 +162,31 @@ git commit -m "Your change message"
 git push
 ```
 
-Confirm `BACKEND_URL` and `BFF_SHARED_SECRET` are set in the frontend host's
-server-side environment. If either is missing, the BFF returns HTTP 500 and no
-API call succeeds.
+Push to the branch connected in the Amplify Console to trigger a build. To
+redeploy without a code change (e.g. after fixing an env var or an IAM
+permission), use **Redeploy this version** in the Amplify Console, or push an
+empty commit:
+
+```bash
+git commit --allow-empty -m "Trigger Amplify rebuild"
+git push
+```
+
+Confirm `BACKEND_URL` and `BFF_SHARED_SECRET` are set in the Amplify Console
+under **App settings → Environment variables** (server-side, not
+`NEXT_PUBLIC_*`). If either is missing, the BFF returns HTTP 500 and no API
+call succeeds. Environment variable changes require a redeploy to take effect.
+
+Build status and logs: Amplify Console → your app → the branch → build history.
 
 ## Backend deployment
 
+The Express API runs on an **AWS Lightsail** instance. SSH in using the
+instance's key pair (from the Lightsail Console, or your own key if you added
+it), then:
+
 ```bash
+ssh <user>@<lightsail-static-ip>
 cd /path/to/Study-Abroad-News
 git pull
 npm ci --omit=dev --no-audit --no-fund
@@ -148,7 +196,8 @@ pm2 save
 ```
 
 If only backend source changed and dependencies did not, `npm ci` can be
-skipped.
+skipped. Use a **static IP** attached to the instance (Lightsail Console →
+Networking) so the address survives a reboot or instance stop/start.
 
 Check logs:
 
@@ -331,13 +380,13 @@ pm2 startup                                 # enable on reboot
 Frontend only:
 
 ```text
-Push to the release branch -> CI/CD builds and deploys
+Push to the Amplify-connected branch -> Amplify builds and deploys
 ```
 
 Backend only:
 
 ```text
-SSH -> git pull -> npm ci (if deps changed) -> prisma generate -> pm2 restart
+SSH to Lightsail -> git pull -> npm ci (if deps changed) -> prisma generate -> pm2 restart
 ```
 
 Database changed:
