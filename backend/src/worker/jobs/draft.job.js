@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { JobNames } from "../../modules/ingestion/types.js";
+import { sendDraftNotificationEmail } from "../../modules/notifications/email.service.js";
 
 /**
  * Generates a URL-safe unique slug from a headline.
@@ -103,6 +104,10 @@ export async function handleDraftJob(job) {
         status: "DRAFT_CREATED",
       },
     });
+
+    // Fire-and-forget: a genuinely new draft, not a retry reusing an
+    // existing article, so notify the editorial team it needs review.
+    sendDraftNotificationEmail(article);
   } else if (!candidate.articleId) {
     await prisma.articleCandidate.update({
       where: { id: candidate.id },

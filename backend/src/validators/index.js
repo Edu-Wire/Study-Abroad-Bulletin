@@ -425,6 +425,11 @@ export const SettingsUpdateSchema = z.object({
     .trim()
     .email("Invalid email address"),
   timezone: z.string({ required_error: "Primary timezone is required" }).trim().min(1, "Primary timezone is required"),
+  draftNotificationEmail: z
+    .string()
+    .trim()
+    .email("Invalid email address")
+    .optional(),
 });
 
 /** Schema for PUT /api/student/profile */

@@ -87,6 +87,20 @@ export abstract class WebListingAdapter extends BaseSourceAdapter {
         });
       }
 
+      // `ctx.http.get` only throws for network failures and retry-exhausted
+      // statuses (429/5xx) — a plain 404 or other non-2xx comes back as a
+      // normal response whose body is often a real, parseable error page.
+      // Without this check that page silently parses to zero items and the
+      // run reports SUCCESS, indistinguishable from a listing that
+      // legitimately has nothing new.
+      if (response.status < 200 || response.status >= 300) {
+        throw new DiscoveryPageError(
+          this.code,
+          { pageNumber, url },
+          new Error(`Listing page returned HTTP ${response.status}`)
+        );
+      }
+
       const items = this.parseListing(response.body, response.finalUrl);
       if (items.length === 0) {
         // An empty first page on a listing that normally has rows means the

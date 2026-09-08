@@ -492,7 +492,9 @@ const AUSTRALIA_SOURCES: SourceConfigInput[] = [
     externalIdStrategy: "NATIVE_GUID",
     canonicalUrlRule: "education.gov.au article URL from the feed link",
     discovery: {
-      url: "https://www.education.gov.au/newsroom/rss.xml",
+      // Was https://www.education.gov.au/newsroom/rss.xml — path moved; verified
+      // 2026-09-05 against the <link rel="alternate"> tag on the live /newsroom page.
+      url: "https://www.education.gov.au/rss/newsroom.xml",
       pagination: { mode: "NONE" },
     },
     detail: {
@@ -583,7 +585,11 @@ const AUSTRALIA_SOURCES: SourceConfigInput[] = [
     adapter: "DATA_FILE",
     adapterClass: "AustraliaSourceAdapter",
     transport: "DATA",
-    enabled: true,
+    // Disabled 2026-09-05: the URL itself is correct and current (verified via
+    // a browser-rendering proxy), but education.gov.au's bot protection blocks
+    // this adapter's plain HTTP client outright — every request hangs until
+    // timeout. Re-enable once the adapter can fetch through that protection.
+    enabled: false,
     priority: "LOW",
     schedule: CRON.monthly,
     cadenceMinutes: 43_200,
@@ -725,7 +731,13 @@ const US_SOURCES: SourceConfigInput[] = [
     adapter: "WEB_LISTING",
     adapterClass: "UsaSourceAdapter",
     transport: "WEB",
-    enabled: true,
+    // Disabled 2026-09-05: the URL is correct and current, but travel.state.gov
+    // now sits behind a Cloudflare JS challenge for every page on the domain
+    // (confirmed: real content pages return the challenge page, genuinely
+    // nonexistent paths still return plain 404s). No URL change fixes this —
+    // re-enable once the adapter can execute a JS challenge or route through
+    // a browser-rendering fetch.
+    enabled: false,
     priority: "HIGH",
     schedule: CRON.every15m,
     cadenceMinutes: 15,
@@ -906,7 +918,10 @@ const GERMANY_SOURCES: SourceConfigInput[] = [
     externalIdStrategy: "NATIVE_GUID",
     canonicalUrlRule: "auswaertiges-amt.de article URL from the feed link",
     discovery: {
-      url: "https://www.auswaertiges-amt.de/en/newsroom/newsletter/rss/229868-229868",
+      // Was .../newsroom/newsletter/rss/229868-229868, which now serves a JS
+      // shell instead of XML. Verified 2026-09-05 via the feed-index page at
+      // .../en/newsroom/newsletter/rss.
+      url: "https://www.auswaertiges-amt.de/static/includes/rss_en/RSS_Aktuelle_Artikel.xml",
       pagination: { mode: "NONE" },
     },
     detail: {
@@ -947,7 +962,9 @@ const GERMANY_SOURCES: SourceConfigInput[] = [
     externalIdStrategy: "NATIVE_GUID",
     canonicalUrlRule: "auswaertiges-amt.de item URL from the feed link",
     discovery: {
-      url: "https://www.auswaertiges-amt.de/en/newsroom/newsletter/rss/229870-229870",
+      // Was .../newsroom/newsletter/rss/229870-229870, now returns HTTP 400.
+      // Verified 2026-09-05 via the feed-index page at .../en/newsroom/newsletter/rss.
+      url: "https://www.auswaertiges-amt.de/static/includes/rss_en/RSS_Pressemitteilungen_Reden.xml",
       pagination: { mode: "NONE" },
     },
     detail: {
@@ -1032,6 +1049,11 @@ const GERMANY_SOURCES: SourceConfigInput[] = [
     cadenceMinutes: 60,
     externalIdStrategy: "CANONICAL_URL",
     canonicalUrlRule: "daad.de item URL after redirect and canonical tag",
+    // GermanyDaadAdapter.discover() ignores this URL and reads
+    // https://www.daad.de/sitemap.xml instead: the listing page below is a
+    // client-rendered shell (verified 2026-09-05) with no server-rendered
+    // article links, so a listing-page walk can never find anything here.
+    // Left in place as the human-readable "what this source is" reference.
     discovery: {
       url: "https://www.daad.de/en/the-daad/communication-publications/press/press-releases/",
       pagination: { mode: "PAGE_NUMBER", pageParam: "page", maxPages: 20 },
@@ -1363,8 +1385,11 @@ const EU_SOURCES: SourceConfigInput[] = [
     externalIdStrategy: "NATIVE_GUID",
     canonicalUrlRule: "commission.europa.eu item URL from the feed link",
     discovery: {
-      url: "https://commission.europa.eu/news-and-media_en",
-      pagination: { mode: "PAGE_NUMBER", pageParam: "page", maxPages: 30 },
+      // Was https://commission.europa.eu/news-and-media_en, a plain landing
+      // page with no feed — never real RSS. Verified 2026-09-05: the Press
+      // Corner API below returns genuine RSS 2.0 and needs no pagination.
+      url: "https://ec.europa.eu/commission/presscorner/api/rss",
+      pagination: { mode: "NONE" },
     },
     detail: {
       strategy: "SERVER_RENDERED_HTML",

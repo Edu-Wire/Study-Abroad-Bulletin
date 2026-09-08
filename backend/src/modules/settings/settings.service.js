@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS = {
   tagline: "Study Abroad Intelligence",
   contactEmail: "editorial@abroadbulletin.com",
   timezone: "UTC (GMT+0)",
+  draftNotificationEmail: "info@digi-wire.com",
 };
 
 /** Returns the singleton row, creating it with defaults on first read. */

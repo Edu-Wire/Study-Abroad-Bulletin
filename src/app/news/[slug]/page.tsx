@@ -8,7 +8,7 @@ import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { CountryFlag } from "@/components/common/CountryFlag";
 import { AdSidebar, InlineAd } from "@/components/editorial/AdComponents";
 import { ArticleShare } from "@/components/common/ArticleShare";
-import { getArticleBySlug, getArticleBySlugForAdmin, getAllNews } from "@/lib/articles";
+import { getArticleBySlug, getArticleBySlugForAdmin, getArticleByPreviewToken, getAllNews } from "@/lib/articles";
 import AdminArticleLiveEditor from "@/components/editorial/AdminArticleLiveEditor";
 
 // Force dynamic so slugs added via admin are immediately accessible
@@ -44,51 +44,70 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // This page is fully dynamic so that RSS articles arriving after deployment
 // are served without requiring a rebuild.
 
+/** Shared by the admin-preview and share-link-preview branches - same raw shape, same mapping. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
+function mapAdminRawToArticle(raw: any) {
+  return {
+    id: raw.id,
+    slug: raw.slug,
+    headline: raw.headline,
+    summary: raw.summary,
+    content: raw.content,
+    category: raw.category,
+    country: raw.primaryCountry?.name ?? "Global",
+    date: (() => {
+      if (!raw.publishedAt) return "Draft";
+      const d = new Date(raw.publishedAt);
+      return isNaN(d.getTime())
+        ? "Draft"
+        : d.toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          });
+    })(),
+    readingTime: raw.readingTime || "3 min read",
+    image: raw.image || "/images/news-library.jpg",
+    breaking: raw.breaking,
+    featured: raw.featured,
+    isRss: raw.isRss,
+    sourceUrl: raw.sourceUrl ?? undefined,
+    sourceName: raw.sourceName ?? undefined,
+    status: raw.status,
+    primaryCountryId: raw.primaryCountryId || null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
+    countryIds: raw.countries?.map((c: any) => c.country?.id || c.countryId) || [],
+  };
+}
+
 export default async function ArticlePage({ params, searchParams }: Props) {
   const { slug } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const isAdminPreview = resolvedSearchParams.adminPreview === "true";
+  const previewToken =
+    typeof resolvedSearchParams.preview === "string" ? resolvedSearchParams.preview : null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
   let article: any = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
   let adminRaw: any = null;
+  // A share-link view: same read-only rendering path as a published article,
+  // never the admin-editor branch below (that's gated on isAdminPreview only).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
+  let tokenRaw: any = null;
+  if (previewToken) {
+    tokenRaw = await getArticleByPreviewToken(slug, previewToken);
+  }
 
   if (isAdminPreview) {
     adminRaw = await getArticleBySlugForAdmin(slug);
     if (adminRaw) {
-      article = {
-        id: adminRaw.id,
-        slug: adminRaw.slug,
-        headline: adminRaw.headline,
-        summary: adminRaw.summary,
-        content: adminRaw.content,
-        category: adminRaw.category,
-        country: adminRaw.primaryCountry?.name ?? "Global",
-        date: (() => {
-          if (!adminRaw.publishedAt) return "Draft";
-          const d = new Date(adminRaw.publishedAt);
-          return isNaN(d.getTime())
-            ? "Draft"
-            : d.toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              });
-        })(),
-        readingTime: adminRaw.readingTime || "3 min read",
-        image: adminRaw.image || "/images/news-library.jpg",
-        breaking: adminRaw.breaking,
-        featured: adminRaw.featured,
-        isRss: adminRaw.isRss,
-        sourceUrl: adminRaw.sourceUrl ?? undefined,
-        sourceName: adminRaw.sourceName ?? undefined,
-        status: adminRaw.status,
-        primaryCountryId: adminRaw.primaryCountryId || null,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
-        countryIds: adminRaw.countries?.map((c: any) => c.country?.id || c.countryId) || [],
-      };
+      article = mapAdminRawToArticle(adminRaw);
     }
+  }
+
+  if (!article && tokenRaw) {
+    article = mapAdminRawToArticle(tokenRaw);
   }
 
   if (!article) {
