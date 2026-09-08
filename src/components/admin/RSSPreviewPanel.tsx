@@ -238,27 +238,27 @@ function RssItemCard({
     flag: "🌐",
   };
 
-  return (
+    return (
     <div
       id={`rss-item-${encodeURIComponent(item.sourceUrl)}`}
-      className={`relative bg-white rounded-xl border transition-all duration-200 ${
+      className={`relative bg-white rounded-[24px] border transition-all duration-200 ${
         effectiveAlreadyImported
           ? "border-emerald-200/80 bg-emerald-50/15"
-          : "border-slate-200/80 hover:border-slate-300 hover:shadow-xs"
-      } p-4 flex flex-col justify-between gap-3`}
+          : "border-slate-200/80 hover:border-slate-300 hover:shadow-[0_6px_20px_rgba(0,0,0,0.04)]"
+      } p-5 flex flex-col justify-between gap-3.5`}
     >
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {/* Source badge row */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${badge.bg} ${badge.text} ${badge.border}`}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold border ${badge.bg} ${badge.text} ${badge.border}`}
             >
               <span className="text-xs">{badge.flag}</span>
               {badge.label}
             </span>
             {showNewBadge && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/90 uppercase tracking-wider shadow-2xs">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/90 uppercase tracking-wider shadow-2xs">
                 <Sparkles className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
                 NEW
               </span>
@@ -314,7 +314,7 @@ function RssItemCard({
       </div>
 
       {/* Footer: source URL + action */}
-      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 flex-wrap">
+      <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 flex-wrap">
         <a
           href={item.sourceUrl}
           target="_blank"
@@ -331,7 +331,7 @@ function RssItemCard({
           {effectiveAlreadyImported ? (
             <button
               disabled
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200/90 cursor-not-allowed select-none shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200/90 cursor-not-allowed select-none shadow-2xs"
               title={
                 item.existingStatus
                   ? `In CMS · ${STATUS_LABEL[item.existingStatus] ?? item.existingStatus}`
@@ -365,7 +365,7 @@ function RssItemCard({
               id={`import-btn-${encodeURIComponent(item.sourceUrl).slice(-20)}`}
               onClick={handleImport}
               disabled={importState.status === "loading"}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1769E0] text-white hover:bg-[#1357bd] disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold bg-[#1769E0] text-white hover:bg-[#1357bd] disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs hover:shadow-xs"
             >
               {importState.status === "loading" ? (
                 <>
@@ -468,7 +468,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
   return (
     <div className="space-y-4">
       {/* Filter and Action Toolbar */}
-      <div className="flex items-center justify-between flex-wrap gap-3 p-3 sm:p-4 bg-slate-50/70 border border-slate-200/80 rounded-xl">
+      <div className="flex items-center justify-between flex-wrap gap-3 p-3.5 sm:p-4 bg-slate-50/70 border border-slate-200/80 rounded-[22px]">
         <div className="flex items-center gap-3 flex-wrap">
           {/* Source filter buttons */}
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -482,10 +482,10 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
                     setFilterSource(src);
                     setRssPage(1);
                   }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer shadow-2xs ${
                     isSelected
-                      ? "bg-[#1769E0] text-white border-[#1769E0] shadow-2xs"
-                      : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                      ? "bg-[#1769E0] text-white border-[#1769E0] shadow-sm"
+                      : "bg-white text-slate-700 border-slate-200/90 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
                   {b && <span>{b.flag}</span>}
@@ -496,13 +496,13 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
           </div>
 
           {/* Status filter buttons: All / Ready / Imported */}
-          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-slate-100/90 border border-slate-200/80 rounded-full p-1">
             <button
               onClick={() => {
                 setFilterStatus("ALL");
                 setRssPage(1);
               }}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                 filterStatus === "ALL"
                   ? "bg-[#1769E0] text-white shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -515,7 +515,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
                 setFilterStatus("READY");
                 setRssPage(1);
               }}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                 filterStatus === "READY"
                   ? "bg-[#1769E0] text-white shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -528,7 +528,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
                 setFilterStatus("IMPORTED");
                 setRssPage(1);
               }}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                 filterStatus === "IMPORTED"
                   ? "bg-emerald-600 text-white shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -550,7 +550,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
             id="rss-preview-refresh-btn"
             onClick={loadPreview}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 transition-all cursor-pointer shadow-2xs hover:shadow-xs"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -565,19 +565,19 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
           <p className="text-xs font-medium">Fetching official government RSS feeds…</p>
         </div>
       ) : error ? (
-        <div className="py-12 flex flex-col items-center gap-3 text-center bg-white border border-slate-200/80 rounded-xl p-6">
+        <div className="py-12 flex flex-col items-center gap-3 text-center bg-white border border-slate-200/80 rounded-[24px] p-6 shadow-xs">
           <AlertCircle className="h-8 w-8 text-rose-500" />
           <p className="text-sm font-semibold text-slate-900">Failed to load RSS feeds</p>
           <p className="text-xs text-slate-500 max-w-sm">{error}</p>
           <button
             onClick={loadPreview}
-            className="mt-2 px-4 py-2 text-xs font-semibold bg-[#1769E0] text-white rounded-lg hover:bg-[#1357bd] transition-colors cursor-pointer shadow-2xs"
+            className="mt-2 px-5 py-2.5 text-xs font-semibold bg-[#1769E0] text-white rounded-full hover:bg-[#1357bd] transition-all cursor-pointer shadow-2xs hover:shadow-xs"
           >
             Try Again
           </button>
         </div>
       ) : filteredItems.length === 0 ? (
-        <div className="py-12 flex flex-col items-center gap-3 text-center bg-white border border-slate-200/80 rounded-xl p-6">
+        <div className="py-12 flex flex-col items-center gap-3 text-center bg-white border border-slate-200/80 rounded-[24px] p-6 shadow-xs">
           <Rss className="h-8 w-8 text-slate-300" />
           <p className="text-sm font-semibold text-slate-900">
             {items.length === 0
@@ -610,7 +610,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
 
           {/* Pagination Bar */}
           {rssTotalPages > 1 && (
-            <div className="flex items-center justify-between p-3 border-t border-slate-200/80 bg-white rounded-xl">
+            <div className="flex items-center justify-between p-3.5 border border-slate-200/80 bg-white rounded-[22px] shadow-2xs">
               <p className="text-[11px] text-slate-500">
                 Page <span className="font-semibold text-slate-900">{rssPage}</span> of{" "}
                 <span className="font-semibold text-slate-900">{rssTotalPages}</span>
@@ -621,7 +621,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
                 <button
                   onClick={() => setRssPage(1)}
                   disabled={rssPage === 1}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="p-2 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   title="First Page"
                 >
                   <ChevronsLeft className="h-3.5 w-3.5" />
@@ -629,7 +629,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
                 <button
                   onClick={() => setRssPage((p) => Math.max(1, p - 1))}
                   disabled={rssPage === 1}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="p-2 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   title="Previous Page"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
@@ -650,9 +650,9 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
                       <button
                         key={p}
                         onClick={() => setRssPage(p as number)}
-                        className={`min-w-[28px] h-7 px-2 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                        className={`min-w-[32px] h-8 px-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                           rssPage === p
-                            ? "bg-[#1769E0] text-white shadow-2xs"
+                            ? "bg-[#1769E0] text-white shadow-xs"
                             : "text-slate-700 hover:bg-slate-100"
                         }`}
                       >
@@ -663,7 +663,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
                 <button
                   onClick={() => setRssPage((p) => Math.min(rssTotalPages, p + 1))}
                   disabled={rssPage === rssTotalPages}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="p-2 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   title="Next Page"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />
@@ -671,7 +671,7 @@ export function RSSPreviewPanel({ onImportSuccess }: { onImportSuccess: () => vo
                 <button
                   onClick={() => setRssPage(rssTotalPages)}
                   disabled={rssPage === rssTotalPages}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="p-2 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   title="Last Page"
                 >
                   <ChevronsRight className="h-3.5 w-3.5" />

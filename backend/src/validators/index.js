@@ -275,6 +275,19 @@ export const ArticleStatusUpdateSchema = z.object({
   }),
 });
 
+/** Schema for PATCH /api/admin/articles/bulk-status */
+export const ArticleBulkStatusSchema = z.object({
+  ids: z
+    .array(z.string().trim().min(1, "Article ID cannot be empty"))
+    .min(1, "At least one article ID is required"),
+  status: z.enum(ARTICLE_STATUSES, {
+    errorMap: () => ({
+      message: `Invalid status. Must be one of: ${ARTICLE_STATUSES.join(", ")}`,
+    }),
+  }),
+});
+
+
 /** Schema for POST /api/admin/articles/import-rss */
 export const RssImportSchema = z.object({
   rssSourceId: z

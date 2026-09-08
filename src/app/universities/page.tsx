@@ -43,10 +43,11 @@ export default async function UniversitiesPage() {
         </div>
 
         {/* University discovery with filters */}
-        <FindYourUniversity universities={universities} />
+        <FindYourUniversity universities={universities} showAll showHeading={false} />
       </main>
       <Footer />
       <MobileBottomNav />
     </div>
   );
 }
+

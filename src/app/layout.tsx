@@ -60,6 +60,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${inter.variable} ${plusJakartaSans.variable}`}
     >
       <body className="min-h-screen bg-background antialiased">{children}</body>

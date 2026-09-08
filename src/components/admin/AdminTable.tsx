@@ -34,11 +34,11 @@ export function AdminTableContainer({
 
   return (
     <div
-      className={`bg-white border border-slate-200/80 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.02)] overflow-hidden flex flex-col ${className}`}
+      className={`bg-white border border-slate-200/75 rounded-[28px] shadow-[0_4px_16px_rgba(0,0,0,0.02)] overflow-hidden flex flex-col ${className}`}
     >
       {/* Table Toolbar */}
       {hasToolbar && (
-        <div className="p-3.5 sm:p-4 border-b border-slate-200/80 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-slate-200/75 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {title && (
             <div className="flex items-center gap-2 shrink-0">
               <span className="h-2 w-2 rounded-full bg-[#1769E0]" />
@@ -46,7 +46,7 @@ export function AdminTableContainer({
                 {title}
               </h2>
               {typeof count === "number" && (
-                <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200/80">
+                <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200/80">
                   {count}
                 </span>
               )}
@@ -56,13 +56,13 @@ export function AdminTableContainer({
           <div className="flex items-center gap-2 sm:gap-2.5 flex-1 sm:justify-end flex-wrap">
             {onSearchChange && (
               <div className="relative flex-1 sm:max-w-xs min-w-[180px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   value={searchValue}
                   onChange={(e) => onSearchChange(e.target.value)}
                   placeholder={searchPlaceholder}
-                  className="w-full h-8.5 pl-8.5 pr-3 text-xs bg-slate-50/70 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
+                  className="w-full h-9 pl-9 pr-4 text-xs bg-slate-50/70 border border-slate-200/80 rounded-full text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#1769E0] focus:bg-white transition-colors"
                 />
               </div>
             )}

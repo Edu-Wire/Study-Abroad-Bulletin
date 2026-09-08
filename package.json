@@ -17,6 +17,7 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
+    "db:import": "tsx prisma/import-programs.ts",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:preflight:duplicates": "tsx prisma/preflight-duplicates.ts",
     "lint:baseline": "node scripts/lint-baseline.mjs",

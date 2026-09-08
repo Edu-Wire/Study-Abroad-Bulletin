@@ -29,6 +29,7 @@ const EXPECTED_ROUTES = [
   "GET /api/admin/articles",
   "POST /api/admin/articles",
   "PUT /api/admin/articles/:id",
+  "PATCH /api/admin/articles/bulk-status",
   "PATCH /api/admin/articles/:id/status",
   "DELETE /api/admin/articles/:id",
   "GET /api/admin/rss/preview",
