@@ -25,3 +25,20 @@ export type University = {
   universityAverageScholarshipRemarks?: string | null;
   programs?: unknown[];
 };
+
+export type PaginationMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+};
+
+export type PaginatedUniversitiesResponse = {
+  success: boolean;
+  count: number;
+  data: University[];
+  universities: University[];
+  pagination: PaginationMeta;
+};

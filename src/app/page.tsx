@@ -20,6 +20,8 @@ import { FindYourUniversity } from "@/components/home/FindYourUniversity";
 import { AdBanner } from "@/components/editorial/AdComponents";
 import { getAllNews, getBreakingArticle } from "@/lib/articles";
 
+import { supabase } from "@/lib/supabaseClient";
+
 export const metadata: Metadata = {
   title: "Study Abroad Intelligence — Universities, Scholarships & Visa News",
   description:
@@ -48,6 +50,18 @@ export default async function HomePage() {
     getAllNews(),
     getBreakingArticle(),
   ]);
+
+  // Test Supabase connection directly on the server
+  const { data: supabaseTest, error: supabaseError } = await supabase
+    .from("University")
+    .select("*")
+    .limit(5);
+
+  if (supabaseError) {
+    console.error("Supabase connection error:", supabaseError);
+  } else {
+    console.log("Supabase connection successful! Sample records:", supabaseTest?.length);
+  }
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 overflow-x-clip">
