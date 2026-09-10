@@ -1,8 +1,17 @@
 import Link from "next/link";
-import { Globe2, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { Header } from "@/components/site/Header";
+import { getSessionUser } from "@/lib/server/session";
 
-export default function WelcomePage() {
+interface WelcomePageProps {
+  searchParams?: Promise<{ studentId?: string }>;
+}
+
+export default async function WelcomePage({ searchParams }: WelcomePageProps) {
+  const params = searchParams ? await searchParams : undefined;
+  const user = await getSessionUser();
+  const studentId = params?.studentId || user?.studentId;
+
   return (
     <div className="flex min-h-screen flex-col bg-surface">
       <Header />
@@ -20,12 +29,33 @@ export default function WelcomePage() {
             Your account is set up. Start exploring universities, scholarships, visa updates
             and the latest study-abroad news.
           </p>
+
+          {studentId && (
+            <div className="mt-5 rounded-lg border border-primary/20 bg-primary/5 p-4 text-center">
+              <span className="text-xs uppercase font-bold tracking-wider text-primary">Your Student ID</span>
+              <div className="mt-1.5 flex items-center justify-center">
+                <span className="font-mono text-xl font-black text-foreground tracking-wider bg-card px-4 py-1.5 rounded-md border border-border shadow-xs">
+                  {studentId}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Save this ID. You can sign in using this Student ID or your email address.
+              </p>
+            </div>
+          )}
+
           <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
-            <Link href="/dashboard" className="h-10 inline-flex items-center justify-center rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-navy">
-              Go to Dashboard
+            <Link
+              href={studentId ? `/dashboard/profile?welcome=1&studentId=${encodeURIComponent(studentId)}` : "/dashboard/profile?welcome=1"}
+              className="h-10 inline-flex items-center justify-center rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-navy"
+            >
+              Complete Your Profile
             </Link>
-            <Link href="/" className="h-10 inline-flex items-center justify-center rounded-md border border-border px-5 text-sm font-semibold text-foreground transition-colors hover:border-primary hover:text-primary">
-              Explore Platform
+            <Link
+              href="/dashboard"
+              className="h-10 inline-flex items-center justify-center rounded-md border border-border px-5 text-sm font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
+            >
+              Go to Dashboard
             </Link>
           </div>
         </div>

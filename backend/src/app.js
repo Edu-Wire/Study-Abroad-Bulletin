@@ -120,8 +120,26 @@ function generateTemporaryPassword(length = 12) {
 }
 
 /**
+ * Generate a unique Student ID in format STU-XXXXXX (e.g. STU-849201)
+ */
+async function generateStudentId() {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const num = Math.floor(100000 + Math.random() * 900000);
+    const candidate = `STU-${num}`;
+    const exists = await prisma.user.findUnique({
+      where: { studentId: candidate },
+      select: { id: true },
+    });
+    if (!exists) {
+      return candidate;
+    }
+  }
+  return `STU-${Date.now().toString().slice(-6)}`;
+}
+
+/**
  * @route   POST /api/signup
- * @desc    Register a new user in PostgreSQL
+ * @desc    Register a new user account with studentId and establish session
  * @access  Public (Rate Limited: 10 requests / 15 mins)
  */
 app.post(
@@ -129,75 +147,80 @@ app.post(
   authLimiter,
   validateRequest({ body: SignupSchema }),
   async (req, res) => {
-  try {
-    const { firstName, lastName, email, password } = res.locals.validated.body;
+    try {
+      const { firstName, lastName, email, password } = res.locals.validated.body;
 
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({
+      if (!firstName || !lastName || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide first name, last name, email, and password.",
+        });
+      }
+
+      // Password strength is enforced by StrongPasswordSchema in the validator.
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Check if user already exists in PostgreSQL
+      const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: "An account with this email already exists.",
+        });
+      }
+
+      // Hash password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Generate unique Student ID
+      const studentId = await generateStudentId();
+
+      // Create user in PostgreSQL
+      const newUser = await prisma.user.create({
+        data: {
+          studentId,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: normalizedEmail,
+          password: hashedPassword,
+        },
+      });
+
+      // Mint an opaque, database-backed session.
+      const { rawToken } = await createSession(newUser.id);
+
+      // Host-only HttpOnly cookie. The raw token is never placed in the body.
+      res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
+
+      return res.status(201).json({
+        success: true,
+        message: "Account created successfully.",
+        user: {
+          id: newUser.id,
+          studentId: newUser.studentId,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          email: newUser.email,
+          role: newUser.role,
+        },
+      });
+    } catch (error) {
+      console.error("Signup error:", error);
+      return res.status(500).json({
         success: false,
-        message: "Please provide first name, last name, email, and password.",
+        message: "Server error during registration. Please try again.",
       });
     }
-
-    // Password strength is enforced by StrongPasswordSchema in the validator.
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    // Check if user already exists in PostgreSQL
-    const existingUser = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "An account with this email already exists.",
-      });
-    }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user in PostgreSQL
-    const newUser = await prisma.user.create({
-      data: {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: normalizedEmail,
-        password: hashedPassword,
-      },
-    });
-
-    // Mint an opaque, database-backed session.
-    const { rawToken } = await createSession(newUser.id);
-
-    // Host-only HttpOnly cookie. The raw token is never placed in the body.
-    res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
-
-    return res.status(201).json({
-      success: true,
-      message: "Account created successfully.",
-      user: {
-        id: newUser.id,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        email: newUser.email,
-        role: newUser.role,
-      },
-    });
-  } catch (error) {
-    console.error("Signup error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error during registration. Please try again.",
-    });
-  }
-});
+  });
 
 /**
  * @route   POST /api/login
- * @desc    Authenticate user and establish an opaque session
+ * @desc    Authenticate user by Email or Student ID and establish an opaque session
  * @access  Public (Rate Limited: 10 requests / 15 mins)
  */
 app.post(
@@ -205,86 +228,96 @@ app.post(
   authLimiter,
   validateRequest({ body: LoginSchema }),
   async (req, res) => {
-  try {
-    const { email, password } = res.locals.validated.body;
+    try {
+      const { identifier, email, password } = res.locals.validated.body;
+      const loginId = (identifier || email || "").trim();
 
-    if (!email || !password) {
-      return res.status(400).json({
+      if (!loginId || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Please enter your email or student ID and password.",
+        });
+      }
+
+      const isEmail = loginId.includes("@");
+      const normalized = loginId.toLowerCase();
+
+      const user = await prisma.user.findFirst({
+        where: isEmail
+          ? { email: normalized }
+          : {
+              OR: [
+                { studentId: loginId.toUpperCase() },
+                { email: normalized },
+              ],
+            },
+      });
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid email or student ID or password.",
+        });
+      }
+
+      // Check password match
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid email or student ID or password.",
+        });
+      }
+
+      // Check account lifecycle status (Kill-switch check)
+      if (user.status === "SUSPENDED") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account has been suspended. Please contact support or an administrator.",
+        });
+      }
+
+      if (user.status !== "ACTIVE") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is not active. Please complete account activation.",
+        });
+      }
+
+      // Update lastLogin
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLogin: new Date() },
+      });
+
+      // Mint an opaque, database-backed session.
+      const { rawToken } = await createSession(user.id);
+
+      // Host-only HttpOnly cookie. The raw token is never placed in the body.
+      res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
+
+      return res.status(200).json({
+        success: true,
+        message: "Logged in successfully!",
+        user: {
+          id: user.id,
+          studentId: user.studentId,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          mustChangePassword: user.mustChangePassword,
+        },
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      return res.status(500).json({
         success: false,
-        message: "Please enter both email and password.",
+        message: "Server error during login. Please try again.",
       });
     }
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password.",
-      });
-    }
-
-    // Check password match
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password.",
-      });
-    }
-
-    // Check account lifecycle status (Kill-switch check)
-    if (user.status === "SUSPENDED") {
-      return res.status(403).json({
-        success: false,
-        message: "Your account has been suspended. Please contact support or an administrator.",
-      });
-    }
-
-    if (user.status !== "ACTIVE") {
-      return res.status(403).json({
-        success: false,
-        message: "Your account is not active. Please complete account activation.",
-      });
-    }
-
-    // Update lastLogin
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLogin: new Date() },
-    });
-
-    // Mint an opaque, database-backed session.
-    const { rawToken } = await createSession(user.id);
-
-    // Host-only HttpOnly cookie. The raw token is never placed in the body.
-    res.cookie(SESSION_COOKIE_NAME, rawToken, AUTH_COOKIE_OPTIONS);
-
-    return res.status(200).json({
-      success: true,
-      message: "Logged in successfully!",
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        mustChangePassword: user.mustChangePassword,
-      },
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error during login. Please try again.",
-    });
-  }
-});
+  });
 
 /**
  * @route   POST /api/logout
@@ -538,6 +571,7 @@ app.get("/api/admin/users", ...requireAdmin, async (req, res) => {
     const users = await prisma.user.findMany({
       select: {
         id: true,
+        studentId: true,
         firstName: true,
         lastName: true,
         email: true,

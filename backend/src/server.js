@@ -145,8 +145,26 @@ function generateTemporaryPassword(length = 12) {
 }
 
 /**
+ * Generate a unique Student ID in format STU-XXXXXX (e.g. STU-849201)
+ */
+async function generateStudentId() {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const num = Math.floor(100000 + Math.random() * 900000);
+    const candidate = `STU-${num}`;
+    const exists = await prisma.user.findUnique({
+      where: { studentId: candidate },
+      select: { id: true },
+    });
+    if (!exists) {
+      return candidate;
+    }
+  }
+  return `STU-${Date.now().toString().slice(-6)}`;
+}
+
+/**
  * @route   POST /api/signup
- * @desc    Register a new user in PostgreSQL
+ * @desc    Register a new user account with studentId and establish session
  * @access  Public (Rate Limited: 10 requests / 15 mins)
  */
 app.post(
@@ -184,9 +202,13 @@ app.post(
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
+      // Generate unique Student ID
+      const studentId = await generateStudentId();
+
       // Create user in PostgreSQL
       const newUser = await prisma.user.create({
         data: {
+          studentId,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           email: normalizedEmail,
@@ -205,6 +227,7 @@ app.post(
         message: "Account created successfully.",
         user: {
           id: newUser.id,
+          studentId: newUser.studentId,
           firstName: newUser.firstName,
           lastName: newUser.lastName,
           email: newUser.email,
@@ -222,7 +245,7 @@ app.post(
 
 /**
  * @route   POST /api/login
- * @desc    Authenticate user and establish an opaque session
+ * @desc    Authenticate user by Email or Student ID and establish an opaque session
  * @access  Public (Rate Limited: 10 requests / 15 mins)
  */
 app.post(
@@ -231,25 +254,34 @@ app.post(
   validateRequest({ body: LoginSchema }),
   async (req, res) => {
     try {
-      const { email, password } = res.locals.validated.body;
+      const { identifier, email, password } = res.locals.validated.body;
+      const loginId = (identifier || email || "").trim();
 
-      if (!email || !password) {
+      if (!loginId || !password) {
         return res.status(400).json({
           success: false,
-          message: "Please enter both email and password.",
+          message: "Please enter your email or student ID and password.",
         });
       }
 
-      const normalizedEmail = email.toLowerCase().trim();
+      const isEmail = loginId.includes("@");
+      const normalized = loginId.toLowerCase();
 
-      const user = await prisma.user.findUnique({
-        where: { email: normalizedEmail },
+      const user = await prisma.user.findFirst({
+        where: isEmail
+          ? { email: normalized }
+          : {
+              OR: [
+                { studentId: loginId.toUpperCase() },
+                { email: normalized },
+              ],
+            },
       });
 
       if (!user) {
         return res.status(401).json({
           success: false,
-          message: "Invalid email or password.",
+          message: "Invalid email or student ID or password.",
         });
       }
 
@@ -258,7 +290,7 @@ app.post(
       if (!isMatch) {
         return res.status(401).json({
           success: false,
-          message: "Invalid email or password.",
+          message: "Invalid email or student ID or password.",
         });
       }
 
@@ -294,6 +326,7 @@ app.post(
         message: "Logged in successfully!",
         user: {
           id: user.id,
+          studentId: user.studentId,
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
@@ -563,6 +596,7 @@ app.get("/api/admin/users", ...requireAdmin, async (req, res) => {
     const users = await prisma.user.findMany({
       select: {
         id: true,
+        studentId: true,
         firstName: true,
         lastName: true,
         email: true,

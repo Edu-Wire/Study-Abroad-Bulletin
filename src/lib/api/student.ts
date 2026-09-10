@@ -84,6 +84,70 @@ export interface StudentFeedResponse {
 }
 
 /**
+ * Save (create or update) the authenticated student's profile preferences.
+ * Calls PUT /api/student/profile.
+ */
+export async function saveStudentProfile(
+  data: Partial<StudentProfileData>
+): Promise<{ success: boolean; message: string; profile: StudentProfileData }> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_PATH}/student/profile`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  } catch {
+    throw { success: false, message: "Unable to reach the server. Please try again." };
+  }
+
+  let resData: unknown;
+  try {
+    resData = await res.json();
+  } catch {
+    throw { success: false, message: "Failed to save your profile." };
+  }
+
+  if (!res.ok) {
+    throw resData ?? { success: false, message: "Failed to save your profile." };
+  }
+
+  return resData as { success: boolean; message: string; profile: StudentProfileData };
+}
+
+/**
+ * Fetch the authenticated student's saved profile from GET /api/student/profile.
+ */
+export async function getStudentProfile(): Promise<{
+  success: boolean;
+  profile: StudentProfileData | null;
+}> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_PATH}/student/profile`, {
+      method: "GET",
+      credentials: "include",
+    });
+  } catch {
+    throw { success: false, message: "Unable to reach the server. Please try again." };
+  }
+
+  let resData: unknown;
+  try {
+    resData = await res.json();
+  } catch {
+    throw { success: false, message: "Failed to load your profile." };
+  }
+
+  if (!res.ok) {
+    throw resData ?? { success: false, message: "Failed to load your profile." };
+  }
+
+  return resData as { success: boolean; profile: StudentProfileData | null };
+}
+
+/**
  * Fetch the authenticated student's personalized feed from GET /api/student/feed.
  */
 export async function getStudentFeed(): Promise<StudentFeedResponse> {

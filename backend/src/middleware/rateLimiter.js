@@ -3,6 +3,19 @@ import { clientKeyGenerator } from "./bff.js";
 
 const keyGenerator = clientKeyGenerator;
 
+// ---------------------------------------------------------------------------
+// Loopback skip — rate limiting localhost is pointless (no external threat)
+// and causes 429s during local development. Production is unaffected because
+// real client IPs are never loopback addresses.
+// ---------------------------------------------------------------------------
+const LOOPBACK_ADDRESSES = new Set(["::1", "127.0.0.1", "::ffff:127.0.0.1"]);
+
+function isLoopback(req) {
+  const addr =
+    req.trustedClientAddress ?? req.ip ?? req.socket?.remoteAddress ?? "";
+  return LOOPBACK_ADDRESSES.has(String(addr).trim());
+}
+
 const SERVICE_READ_PREFIXES = [
   "/api/countries",
   "/api/articles/public",
@@ -29,7 +42,7 @@ export function createServiceQuotaLimiter(options = {}) {
     windowMs: 15 * 60 * 1000,
     max: 1000,
     keyGenerator: () => "service-reader",
-    skip: (req) => !isTrustedServiceRead(req),
+    skip: (req) => isLoopback(req) || !isTrustedServiceRead(req),
     standardHeaders: "draft-7",
     legacyHeaders: false,
     statusCode: 429,
@@ -47,6 +60,7 @@ export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   keyGenerator,
+  skip: isLoopback,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   statusCode: 429,
@@ -60,6 +74,7 @@ export const adminMutationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   keyGenerator,
+  skip: isLoopback,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   statusCode: 429,
@@ -74,7 +89,7 @@ export function createGeneralApiLimiter(options = {}) {
     windowMs: 15 * 60 * 1000,
     max: 100,
     keyGenerator,
-    skip: isTrustedServiceRead,
+    skip: (req) => isLoopback(req) || isTrustedServiceRead(req),
     standardHeaders: "draft-7",
     legacyHeaders: false,
     statusCode: 429,

@@ -76,6 +76,7 @@ enum DeadlineImportance {
 
 model User {
   id        String     @id @default(cuid())
+  studentId String?    @unique
   email     String     @unique
   password  String
   firstName String

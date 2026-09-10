@@ -69,6 +69,7 @@ export async function findActiveSession(rawToken) {
       user: {
         select: {
           id: true,
+          studentId: true,
           firstName: true,
           lastName: true,
           email: true,

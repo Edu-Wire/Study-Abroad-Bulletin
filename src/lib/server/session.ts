@@ -24,6 +24,7 @@ export type UserRole =
 
 export interface SessionUser {
   id: string;
+  studentId?: string | null;
   firstName: string;
   lastName: string;
   email: string;

@@ -10,6 +10,7 @@ const API_BASE_PATH = "/api/backend";
 
 export interface AuthUser {
   id: string;
+  studentId?: string | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -25,8 +26,15 @@ export interface AuthResponse {
   user?: AuthUser;
 }
 
+export interface ApiError {
+  success?: boolean;
+  message?: string;
+  errors?: Array<{ location?: string; field?: string; message: string }>;
+}
+
 export interface LoginCredentials {
-  email: string;
+  identifier?: string;
+  email?: string;
   password: string;
 }
 
@@ -79,7 +87,10 @@ export const login = (userData: LoginCredentials): Promise<AuthResponse> =>
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(userData),
+      body: JSON.stringify({
+        ...userData,
+        identifier: (userData.identifier || userData.email || "").trim(),
+      }),
     },
     "Login failed. Please try again."
   );

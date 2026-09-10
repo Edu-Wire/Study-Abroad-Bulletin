@@ -89,16 +89,26 @@ export const SignupSchema = z.object({
 });
 
 /** Schema for POST /api/login */
-export const LoginSchema = z.object({
-  email: z
-    .string({ required_error: "Email is required" })
-    .trim()
-    .email("Invalid email address")
-    .toLowerCase(),
-  password: z
-    .string({ required_error: "Password is required" })
-    .min(1, "Password is required"),
-});
+export const LoginSchema = z
+  .object({
+    identifier: z.string().trim().min(1, "Email or Student ID is required").optional(),
+    email: z.string().trim().min(1, "Email is required").optional(),
+    password: z
+      .string({ required_error: "Password is required" })
+      .min(1, "Password is required"),
+  })
+  .refine((data) => Boolean(data.identifier || data.email), {
+    message: "Email or Student ID is required",
+    path: ["identifier"],
+  })
+  .transform((data) => {
+    const raw = (data.identifier || data.email || "").trim();
+    return {
+      identifier: raw,
+      email: raw.toLowerCase(),
+      password: data.password,
+    };
+  });
 
 // ============================================================================
 // ADMIN USER MANAGEMENT SCHEMAS

@@ -6,7 +6,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { Header } from "@/components/site/Header";
-import { signup as apiSignup } from "@/lib/api/auth";
+import { signup as apiSignup, type ApiError } from "@/lib/api/auth";
+import { toast } from "@/components/common/Toast";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -34,17 +35,28 @@ export default function SignupPage() {
       const res = await apiSignup(formData);
       // The session arrives as an HttpOnly cookie; nothing is stored here.
       if (res.success) {
-        router.push("/auth/welcome");
+        toast.success("Account created successfully!", "Welcome!");
+        const studentId = res.user?.studentId;
+        const target = studentId
+          ? `/dashboard/profile?welcome=1&studentId=${encodeURIComponent(studentId)}`
+          : "/dashboard/profile?welcome=1";
+        router.push(target);
         router.refresh();
       } else {
-        setError(res.message || "Registration failed. Please try again.");
+        const msg = res.message || "Registration failed. Please try again.";
+        setError(msg);
+        toast.error(msg);
       }
     } catch (err: unknown) {
-      const message =
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message?: unknown }).message)
-          : "";
-      setError(message || "Registration failed. Please try again.");
+      const apiErr = err as ApiError;
+      let errorMsg = apiErr?.message || "Registration failed. Please try again.";
+
+      if (apiErr?.errors && apiErr.errors.length > 0) {
+        errorMsg = apiErr.errors.map((e) => e.message).join("\n");
+      }
+
+      setError(errorMsg);
+      toast.error(errorMsg, "Validation Failed");
     } finally {
       setLoading(false);
     }
@@ -153,6 +165,9 @@ export default function SignupPage() {
                   )}
                 </button>
               </div>
+              <p className="mt-1 text-[11px] text-muted-foreground leading-tight">
+                Must be at least 12 characters with uppercase, lowercase, number, and symbol.
+              </p>
             </div>
             <button
               type="submit"

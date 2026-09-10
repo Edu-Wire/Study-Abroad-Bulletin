@@ -60,8 +60,39 @@ if (isProduction) {
 
 const nextConfig: NextConfig = {
   images: {
-    // Allow future external image domains
-    remotePatterns: [],
+    remotePatterns: [
+      // Canadian government sources
+      { protocol: "https", hostname: "**.canada.ca" },
+      { protocol: "https", hostname: "**.gc.ca" },
+      // UK government sources
+      { protocol: "https", hostname: "**.gov.uk" },
+      { protocol: "https", hostname: "assets.publishing.service.gov.uk" },
+      // Australian government sources
+      { protocol: "https", hostname: "**.gov.au" },
+      // US government sources
+      { protocol: "https", hostname: "**.ed.gov" },
+      { protocol: "https", hostname: "**.state.gov" },
+      // International education sources
+      { protocol: "https", hostname: "**.daad.de" },
+      { protocol: "https", hostname: "**.britishcouncil.org" },
+      // Common news & media CDNs
+      { protocol: "https", hostname: "**.reuters.com" },
+      { protocol: "https", hostname: "**.bbc.co.uk" },
+      { protocol: "https", hostname: "**.theguardian.com" },
+      { protocol: "https", hostname: "media.guim.co.uk" },
+      // University image hosts
+      { protocol: "https", hostname: "**.ac.uk" },
+      { protocol: "https", hostname: "**.edu" },
+      { protocol: "https", hostname: "**.edu.au" },
+      // Generic CDNs used by many news sources
+      { protocol: "https", hostname: "images.unsplash.com" },
+      { protocol: "https", hostname: "**.cloudfront.net" },
+      { protocol: "https", hostname: "**.amazonaws.com" },
+      { protocol: "https", hostname: "**.wp.com" },
+      { protocol: "https", hostname: "**.wordpress.com" },
+      // Catch-all for any https image source
+      { protocol: "https", hostname: "**" },
+    ],
   },
   // Strict mode for better development warnings
   reactStrictMode: true,

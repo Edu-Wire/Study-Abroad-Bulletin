@@ -6,12 +6,13 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { Header } from "@/components/site/Header";
-import { login as apiLogin } from "@/lib/api/auth";
+import { login as apiLogin, type ApiError } from "@/lib/api/auth";
+import { toast } from "@/components/common/Toast";
 
 export default function LoginPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
-    email: "",
+    identifier: "",
     password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -29,11 +30,15 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const res = await apiLogin(formData);
+      const res = await apiLogin({
+        identifier: formData.identifier.trim(),
+        password: formData.password,
+      });
       // Success is signalled by `success` alone. The session is an HttpOnly
       // cookie set by the server; there is no token in the response to check
       // and nothing for this page to persist.
       if (res.success) {
+        toast.success("Signed in successfully!", "Welcome Back");
         const role = res.user?.role;
         const destination =
           role === "SUPER_ADMIN" || role === "ADMIN" || role === "EDITOR"
@@ -52,14 +57,18 @@ export default function LoginPage() {
         // Ensure server components re-resolve the new session.
         router.refresh();
       } else {
-        setError(res.message || "Invalid email or password.");
+        const msg = res.message || "Invalid email, student ID, or password.";
+        setError(msg);
+        toast.error(msg, "Login Failed");
       }
     } catch (err: unknown) {
-      const message =
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message?: unknown }).message)
-          : "";
-      setError(message || "Invalid email or password.");
+      const apiErr = err as ApiError;
+      let msg = apiErr?.message || "Invalid email, student ID, or password.";
+      if (apiErr?.errors && apiErr.errors.length > 0) {
+        msg = apiErr.errors.map((e) => e.message).join("\n");
+      }
+      setError(msg);
+      toast.error(msg, "Login Failed");
     } finally {
       setLoading(false);
     }
@@ -98,18 +107,18 @@ export default function LoginPage() {
 
           <form className="mt-5 space-y-3.5" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="login-email" className="meta mb-1 block text-foreground">
-                Email
+              <label htmlFor="login-identifier" className="meta mb-1 block text-foreground">
+                Email or Student ID
               </label>
               <input
-                id="login-email"
-                name="email"
-                type="email"
+                id="login-identifier"
+                name="identifier"
+                type="text"
                 required
-                autoComplete="email"
-                value={formData.email}
+                autoComplete="username"
+                value={formData.identifier}
                 onChange={handleChange}
-                placeholder="you@email.com"
+                placeholder="you@email.com or STU-123456"
                 className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
