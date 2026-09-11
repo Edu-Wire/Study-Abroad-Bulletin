@@ -348,3 +348,19 @@
     padding-left: 1.5em;
   }
 }
+
+/* Smooth fade-in animation for personalized components */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out forwards;
+}

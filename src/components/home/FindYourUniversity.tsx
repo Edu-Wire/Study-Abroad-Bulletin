@@ -41,6 +41,8 @@ interface FindYourUniversityProps {
   showAll?: boolean;
   showHeading?: boolean;
   pageSize?: number;
+  /** Pre-select the Country filter for personalisation. Student can clear it. */
+  defaultCountry?: string;
 }
 
 export function FindYourUniversity({
@@ -48,9 +50,15 @@ export function FindYourUniversity({
   showAll = false,
   showHeading = true,
   pageSize = 18,
+  defaultCountry,
 }: FindYourUniversityProps) {
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<FilterValues>(defaultFilters);
+  const [filters, setFilters] = useState<FilterValues>(() => ({
+    ...defaultFilters,
+    // If a personalised default country is provided AND it exists in the data,
+    // pre-select it. The user can always clear it.
+    Country: defaultCountry ?? "All",
+  }));
   const [currentPage, setCurrentPage] = useState(1);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 

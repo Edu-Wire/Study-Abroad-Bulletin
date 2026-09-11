@@ -18,6 +18,7 @@ import {
 import { Header } from "@/components/site/Header";
 import { saveStudentProfile, getStudentProfile } from "@/lib/api/student";
 import { getCurrentUser, type AuthUser } from "@/lib/api/auth";
+import { useStudentProfile } from "@/context/StudentProfileContext";
 
 // ============================================================================
 // CONSTANTS
@@ -93,6 +94,10 @@ function ProfileSetupContent() {
   const isWelcome = searchParams.get("welcome") === "1";
   const urlStudentId = searchParams.get("studentId");
 
+  // Global context — refreshProfile() updates the site-wide personalization
+  // immediately after save, without requiring a full page refresh.
+  const { refreshProfile } = useStudentProfile();
+
   // User state
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
@@ -162,6 +167,10 @@ function ProfileSetupContent() {
         budgetRange: budgetRange || null,
         interests,
       });
+      // Immediately refresh the global student profile context so
+      // PersonalizedBanner, Header indicator, and news/uni pages reflect
+      // the new preferences as soon as the student lands on /dashboard.
+      await refreshProfile();
       setSaved(true);
       setTimeout(() => router.push("/dashboard"), 1200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

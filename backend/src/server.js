@@ -456,15 +456,34 @@ app.post(
 
 /**
  * @route   GET /api/me
- * @desc    Get current authenticated user info
+ * @desc    Get current authenticated user info + student profile (if applicable)
  */
 app.get("/api/me", ...requireAuth, async (req, res) => {
   try {
+    // Fetch studentProfile in parallel only for STUDENT users — zero cost for admins.
+    let studentProfile = null;
+    if (req.user.role === "STUDENT") {
+      studentProfile = await prisma.studentProfile.findUnique({
+        where: { userId: req.user.id },
+        select: {
+          targetCountries: true,
+          studyLevel: true,
+          degree: true,
+          branch: true,
+          preferredIntake: true,
+          budgetRange: true,
+          interests: true,
+        },
+      });
+    }
+
     return res.status(200).json({
       success: true,
       user: req.user,
+      studentProfile: studentProfile ?? null,
     });
   } catch (error) {
+    console.error("[/api/me] error:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch user profile." });
   }
 });

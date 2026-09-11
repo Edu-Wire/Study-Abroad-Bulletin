@@ -8,6 +8,7 @@ import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { NewsCard } from "@/components/cards/NewsCards";
 import { AdBanner } from "@/components/editorial/AdComponents";
 import { getAllNews } from "@/lib/articles";
+import { NewsPersonalizedSection } from "@/components/news/NewsPersonalizedSection";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +69,10 @@ export default async function NewsPage({ searchParams }: Props) {
 
         {/* Main content */}
         <div className="shell py-10 lg:py-14">
-          {totalArticles === 0 ? (
+          {/* Personalized "Curated for You" strip — client-side, invisible to guests */}
+        <NewsPersonalizedSection articles={news} />
+
+        {totalArticles === 0 ? (
             <div className="py-20 text-center border border-dashed border-border rounded-lg bg-surface">
               <Newspaper className="mx-auto h-12 w-12 text-muted-foreground/40 mb-3" />
               <p className="font-display text-xl font-bold text-foreground">No news articles published yet</p>

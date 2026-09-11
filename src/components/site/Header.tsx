@@ -8,6 +8,7 @@ import { Menu, Search, X } from "lucide-react";
 import { SearchWithDropdown } from "@/components/common/SearchWithDropdown";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/api/auth";
+import { useStudentProfile } from "@/context/StudentProfileContext";
 
 const mainNav = [
   { label: "News", href: "/news" },
@@ -45,6 +46,7 @@ function UtilityBar({
   const [mounted, setMounted] = useState(false);
   const date = mounted ? formatEditionDate() : "";
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { profile } = useStudentProfile();
 
   useEffect(() => {
     // The session cookie is HttpOnly, so it cannot be sniffed from JavaScript.
@@ -89,12 +91,24 @@ function UtilityBar({
             <span>Search</span>
           </button>
           {isLoggedIn ? (
-            <Link
-              href="/dashboard"
-              className="eyebrow text-primary font-bold transition-colors hover:text-navy"
-            >
-              Dashboard
-            </Link>
+            <>
+              {/* Targeting indicator — only for students with a completed profile */}
+              {profile && profile.targetCountries.length > 0 && (
+                <span className="eyebrow text-muted-foreground hidden xl:inline">
+                  Targeting&nbsp;
+                  <span className="text-primary font-semibold">
+                    {profile.targetCountries[0].charAt(0).toUpperCase() +
+                      profile.targetCountries[0].slice(1)}
+                  </span>
+                </span>
+              )}
+              <Link
+                href="/dashboard"
+                className="eyebrow text-primary font-bold transition-colors hover:text-navy"
+              >
+                Dashboard
+              </Link>
+            </>
           ) : (
             <Link
               href="/auth/login"

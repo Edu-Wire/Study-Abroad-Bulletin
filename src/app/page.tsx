@@ -22,6 +22,7 @@ import { getAllNews, getBreakingArticle, getPublishedGuides, getPublishedVisaUpd
 import { getUniversities, toFrontendUniversity } from "@/lib/server/universities";
 import { getScholarships, toFrontendScholarship } from "@/lib/server/scholarships";
 import { getCountries } from "@/lib/server/countries";
+import { PersonalizedBanner } from "@/components/home/PersonalizedBanner";
 
 export const metadata: Metadata = {
   title: "Study Abroad Intelligence — Universities, Scholarships & Visa News",
@@ -74,6 +75,8 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0 min-w-0 overflow-x-clip">
       <Header />
+      {/* Personalized strip — visible only to logged-in students with a filled profile */}
+      <PersonalizedBanner />
       <main className="min-w-0">
         {/* Breaking strip above hero — powered by PostgreSQL */}
         <BreakingStrip article={breakingArticle} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -28,7 +28,7 @@ import {
   type RecommendedDeadlineItem,
   type RecommendedScholarshipItem,
 } from "@/lib/api/student";
-import { getCurrentUser, type AuthUser } from "@/lib/api/auth";
+import { useStudentProfile } from "@/context/StudentProfileContext";
 
 // ============================================================================
 // ADAPTER HELPERS (Mapping Live Feed Items to Component Formats)
@@ -105,31 +105,13 @@ function calculateProfilePercentage(profile: StudentFeedResponse["profile"]): nu
 // ============================================================================
 
 export function DashboardClient() {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  // User identity comes from the global StudentProfileContext — same /api/me
+  // call that was already made on app mount. No duplicate request needed.
+  const { user } = useStudentProfile();
+
   const [feed, setFeed] = useState<StudentFeedResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // 1. Load User Session
-  useEffect(() => {
-    // Identity comes from the server only. Nothing about the user is cached in
-    // localStorage, where it could be read or tampered with.
-    let cancelled = false;
-
-    getCurrentUser()
-      .then((res) => {
-        if (!cancelled && res.success && res.user) {
-          setUser(res.user);
-        }
-      })
-      .catch(() => {
-        // An invalid session is handled by the server on the next navigation.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // 2. Fetch Live Personalized Feed from GET /api/student/feed
   const loadFeed = useCallback(async () => {

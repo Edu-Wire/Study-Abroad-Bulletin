@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
-import { FindYourUniversity } from "@/components/home/FindYourUniversity";
+import { UniversitiesPersonalizedWrapper } from "@/components/universities/UniversitiesPersonalizedWrapper";
 import { AdBanner } from "@/components/editorial/AdComponents";
 import { getUniversities, toFrontendUniversity } from "@/lib/server/universities";
 
@@ -43,7 +43,7 @@ export default async function UniversitiesPage() {
         </div>
 
         {/* University discovery with filters */}
-        <FindYourUniversity universities={universities} showAll showHeading={false} />
+        <UniversitiesPersonalizedWrapper universities={universities} />
       </main>
       <Footer />
       <MobileBottomNav />
