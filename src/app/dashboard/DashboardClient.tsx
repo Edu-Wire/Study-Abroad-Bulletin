@@ -126,7 +126,7 @@ export function DashboardClient() {
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing: untyped external/CMS payload shape. Tracked for follow-up typing.
     } catch (err: any) {
-      console.error("Dashboard feed fetch error:", err);
+      console.error("Dashboard feed fetch error:", err?.message || err);
       setError(
         err?.message || "Unable to connect to the recommendation server."
       );

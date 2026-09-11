@@ -64,6 +64,9 @@ const COUNTRY_STUBS: Record<string, {
 
 const BATCH_SIZE = 25;
 
+// Limit to 25 universities per country (25 * 8 files = 200 universities total)
+const LIMIT_PER_COUNTRY = 25;
+
 // ─────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -414,6 +417,8 @@ async function processFile(file: string, countrySlug: string): Promise<void> {
   const uniIdMap = new Map<number, string>(); // sourceId -> prisma cuid
   let uniDone = 0;
   for (const [sourceId, agg] of uniMap) {
+    if (LIMIT_PER_COUNTRY && uniDone >= LIMIT_PER_COUNTRY) break;
+
     const countryRaw = String(agg.record.universityCountry ?? "").trim();
     const slug = COUNTRY_NAME_TO_SLUG[countryRaw] ?? countrySlug;
     await ensureCountry(slug);
@@ -432,10 +437,16 @@ async function processFile(file: string, countrySlug: string): Promise<void> {
   }
   console.log(`\r  Done: ${uniDone} universities upserted`);
 
-  // Batch-upsert programs
+  // Batch-upsert programs (filter to only records for the upserted universities)
+  const validUids = new Set(uniIdMap.keys());
+  const relevantRecords = records.filter((r) => {
+    const uid = toInt(r.UniversityId);
+    return uid !== null && validUids.has(uid);
+  });
+
   let progDone = 0;
-  for (let i = 0; i < records.length; i += BATCH_SIZE) {
-    const batch = records.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < relevantRecords.length; i += BATCH_SIZE) {
+    const batch = relevantRecords.slice(i, i + BATCH_SIZE);
 
     await Promise.all(
       batch.map(async (record) => {
@@ -458,8 +469,8 @@ async function processFile(file: string, countrySlug: string): Promise<void> {
       })
     );
 
-    const done = Math.min(i + BATCH_SIZE, records.length);
-    process.stdout.write(`\r  Programs: ${done.toLocaleString()}/${records.length.toLocaleString()}     `);
+    const done = Math.min(i + BATCH_SIZE, relevantRecords.length);
+    process.stdout.write(`\r  Programs: ${done.toLocaleString()}/${relevantRecords.length.toLocaleString()}     `);
   }
   console.log(`\r  Done: ${progDone.toLocaleString()} programs upserted`);
 }

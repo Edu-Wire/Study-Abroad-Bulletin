@@ -3,26 +3,32 @@
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { logout as apiLogout } from "@/lib/api/auth";
+import { useStudentProfile } from "@/context/StudentProfileContext";
 
 interface LogoutButtonProps {
   className?: string;
   variant?: "default" | "outline" | "text";
   showIcon?: boolean;
+  onClick?: () => void;
 }
 
 export function LogoutButton({
   className = "",
   variant = "outline",
   showIcon = true,
+  onClick,
 }: LogoutButtonProps) {
   const router = useRouter();
+  const { refreshProfile } = useStudentProfile();
 
   const handleLogout = async () => {
-    // The server revokes the session and clears the HttpOnly cookie. There is
-    // no client-side auth state to tidy up, and the cookie is not readable
-    // from JavaScript by design.
+    if (onClick) {
+      onClick();
+    }
+    // The server revokes the session and clears the HttpOnly cookie.
     try {
       await apiLogout();
+      await refreshProfile();
     } catch {
       // apiLogout already degrades gracefully; never trap the user here.
     }

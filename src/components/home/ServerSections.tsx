@@ -42,9 +42,20 @@ interface HeroStats {
 interface HeroProps {
   articles: NewsArticle[];
   stats: HeroStats;
+  editionLabel?: string;
+  isPersonalized?: boolean;
+  canToggle?: boolean;
+  onToggleEdition?: () => void;
 }
 
-export function Hero({ articles, stats }: HeroProps) {
+export function Hero({
+  articles,
+  stats,
+  editionLabel = "Global Edition",
+  isPersonalized = false,
+  canToggle = false,
+  onToggleEdition,
+}: HeroProps) {
   const [lead, second, third, fourth, fifth] = articles;
   if (!lead) return null;
   const editionDate = getEditionDate();
@@ -54,9 +65,27 @@ export function Hero({ articles, stats }: HeroProps) {
       <div className="shell py-5 lg:py-8 min-w-0">
 
         {/* Edition dateline — thin navy bottom border */}
-        <div className="flex items-center justify-between border-b border-primary pb-2 mb-0 min-w-0">
+        <div className="flex items-center justify-between border-b border-primary pb-2 mb-0 min-w-0 flex-wrap gap-2">
           <span className="eyebrow font-bold text-primary tracking-wider truncate pr-2">{editionDate}</span>
-          <span className="eyebrow font-bold text-primary tracking-wider hidden sm:block shrink-0">Global Edition</span>
+          <div className="flex items-center gap-2 shrink-0">
+            {canToggle && onToggleEdition ? (
+              <button
+                type="button"
+                onClick={onToggleEdition}
+                className="eyebrow font-bold px-2 py-0.5 rounded text-xs transition-colors flex items-center gap-1.5 border border-primary/30 hover:bg-primary hover:text-primary-foreground text-primary bg-primary-soft/30 cursor-pointer"
+                title={isPersonalized ? "Switch to Global Edition" : "Switch to Personalized Feed"}
+              >
+                <span>{editionLabel}</span>
+                <span className="text-[10px] opacity-75 font-normal underline">
+                  {isPersonalized ? "(Switch to Global)" : "(Switch to My Feed)"}
+                </span>
+              </button>
+            ) : (
+              <span className="eyebrow font-bold text-primary tracking-wider hidden sm:block shrink-0">
+                {editionLabel}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Main editorial grid — single column on mobile, ~70/30 on desktop */}

@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search, X } from "lucide-react";
 import { SearchWithDropdown } from "@/components/common/SearchWithDropdown";
 import { cn } from "@/lib/utils";
-import { getCurrentUser } from "@/lib/api/auth";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import { useStudentProfile } from "@/context/StudentProfileContext";
 
 const mainNav = [
@@ -45,29 +45,13 @@ function UtilityBar({
   // that depends on the viewer's clock.
   const [mounted, setMounted] = useState(false);
   const date = mounted ? formatEditionDate() : "";
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const { profile } = useStudentProfile();
+  const { user, profile } = useStudentProfile();
 
   useEffect(() => {
-    // The session cookie is HttpOnly, so it cannot be sniffed from JavaScript.
-    // Ask the server instead; this drives presentation only.
-    let cancelled = false;
-
-    getCurrentUser()
-      .then((res) => {
-        if (!cancelled) setIsLoggedIn(Boolean(res.success && res.user));
-      })
-      .catch(() => {
-        if (!cancelled) setIsLoggedIn(false);
-      })
-      .finally(() => {
-        if (!cancelled) setMounted(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    setMounted(true);
   }, []);
+
+  const isLoggedIn = mounted && Boolean(user);
 
   return (
     <div className="hidden lg:block border-b border-border bg-background">
@@ -108,6 +92,11 @@ function UtilityBar({
               >
                 Dashboard
               </Link>
+              <LogoutButton
+                variant="text"
+                showIcon={false}
+                className="eyebrow text-muted-foreground hover:text-destructive transition-colors uppercase tracking-wider text-[11px]"
+              />
             </>
           ) : (
             <Link
@@ -298,6 +287,7 @@ function MobileDrawer({
   const pathname = usePathname();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const firstLinkRef = useRef<HTMLAnchorElement>(null);
+  const { user } = useStudentProfile();
 
   // Focus close button when drawer opens
   useEffect(() => {
@@ -406,22 +396,56 @@ function MobileDrawer({
           ))}
         </nav>
 
-        {/* Auth buttons */}
-        <div className="grid grid-cols-2 gap-2 border-t border-border p-4 shrink-0">
-          <Link
-            href="/auth/login"
-            onClick={onClose}
-            className="h-11 flex items-center justify-center border border-border eyebrow text-foreground hover:border-primary hover:text-primary transition-colors"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="/auth/signup"
-            onClick={onClose}
-            className="h-11 flex items-center justify-center bg-primary eyebrow text-primary-foreground hover:opacity-90 transition-opacity"
-          >
-            Get Started
-          </Link>
+        {/* Auth buttons / User session */}
+        <div className="border-t border-border p-4 shrink-0">
+          {user ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-foreground truncate">
+                    {user.firstName
+                      ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`
+                      : user.email || "Student Account"}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-mono truncate">
+                    {user.studentId ? `ID: ${user.studentId}` : user.email}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Link
+                  href="/dashboard"
+                  onClick={onClose}
+                  className="h-11 flex items-center justify-center border border-border eyebrow text-foreground hover:border-primary hover:text-primary transition-colors text-xs font-semibold"
+                >
+                  Dashboard
+                </Link>
+                <LogoutButton
+                  variant="outline"
+                  showIcon={true}
+                  onClick={onClose}
+                  className="h-11 w-full text-xs font-semibold"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <Link
+                href="/auth/login"
+                onClick={onClose}
+                className="h-11 flex items-center justify-center border border-border eyebrow text-foreground hover:border-primary hover:text-primary transition-colors"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/auth/signup"
+                onClick={onClose}
+                className="h-11 flex items-center justify-center bg-primary eyebrow text-primary-foreground hover:opacity-90 transition-opacity"
+              >
+                Get Started
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>

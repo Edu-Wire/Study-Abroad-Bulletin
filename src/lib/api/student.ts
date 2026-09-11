@@ -99,18 +99,20 @@ export async function saveStudentProfile(
       body: JSON.stringify(data),
     });
   } catch {
-    throw { success: false, message: "Unable to reach the server. Please try again." };
+    throw new Error("Unable to reach the server. Please try again.");
   }
 
-  let resData: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let resData: any;
   try {
     resData = await res.json();
   } catch {
-    throw { success: false, message: "Failed to save your profile." };
+    throw new Error("Failed to save your profile.");
   }
 
   if (!res.ok) {
-    throw resData ?? { success: false, message: "Failed to save your profile." };
+    const msg = resData?.message || resData?.error || "Failed to save your profile.";
+    throw new Error(msg);
   }
 
   return resData as { success: boolean; message: string; profile: StudentProfileData };
@@ -130,18 +132,20 @@ export async function getStudentProfile(): Promise<{
       credentials: "include",
     });
   } catch {
-    throw { success: false, message: "Unable to reach the server. Please try again." };
+    throw new Error("Unable to reach the server. Please try again.");
   }
 
-  let resData: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let resData: any;
   try {
     resData = await res.json();
   } catch {
-    throw { success: false, message: "Failed to load your profile." };
+    throw new Error("Failed to load your profile.");
   }
 
   if (!res.ok) {
-    throw resData ?? { success: false, message: "Failed to load your profile." };
+    const msg = resData?.message || resData?.error || "Failed to load your profile.";
+    throw new Error(msg);
   }
 
   return resData as { success: boolean; profile: StudentProfileData | null };
@@ -158,18 +162,20 @@ export async function getStudentFeed(): Promise<StudentFeedResponse> {
       credentials: "include",
     });
   } catch {
-    throw { success: false, message: "Unable to reach the server. Please try again." };
+    throw new Error("Unable to reach the server. Please try again.");
   }
 
-  let data: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any;
   try {
     data = await res.json();
   } catch {
-    throw { success: false, message: "Failed to load your personalized feed." };
+    throw new Error("Failed to load your personalized feed.");
   }
 
   if (!res.ok) {
-    throw data ?? { success: false, message: "Failed to load your personalized feed." };
+    const msg = data?.message || data?.error || `Failed to load your personalized feed (${res.status})`;
+    throw new Error(msg);
   }
 
   return data as StudentFeedResponse;

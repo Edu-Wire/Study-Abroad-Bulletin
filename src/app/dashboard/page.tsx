@@ -11,6 +11,10 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   const user = await getSessionUser();
 
+  if (!user) {
+    redirect("/auth/login?redirect=/dashboard");
+  }
+
   // A temporary password must be replaced before the account is usable, so a
   // non-staff invited user is not stranded here either.
   if (user?.mustChangePassword) {

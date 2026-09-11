@@ -4,9 +4,7 @@ import { Footer } from "@/components/site/Footer";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
 import { NewsletterCard } from "@/components/common/NewsletterCard";
 import {
-  Hero,
   BreakingStrip,
-  TodaysBriefing,
   ExploreDestinations,
   ScholarshipSpotlight,
   VisaUpdatesSection,
@@ -15,8 +13,8 @@ import {
   ImmigrationTrackerSpotlight,
   ConsultantsSpotlight,
 } from "@/components/home/ServerSections";
-import { LatestNews } from "@/components/home/LatestNews";
-import { FindYourUniversity } from "@/components/home/FindYourUniversity";
+import { HomePersonalizedFeed } from "@/components/home/HomePersonalizedFeed";
+import { UniversitiesPersonalizedWrapper } from "@/components/universities/UniversitiesPersonalizedWrapper";
 import { AdBanner } from "@/components/editorial/AdComponents";
 import { getAllNews, getBreakingArticle, getPublishedGuides, getPublishedVisaUpdates, getRecentArticleCount } from "@/lib/articles";
 import { getUniversities, toFrontendUniversity } from "@/lib/server/universities";
@@ -88,27 +86,14 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Front page hero — newspaper style, uses DB articles */}
-        <Hero articles={articles} stats={heroStats} />
-
-        {/* Today's Briefing — uses DB articles */}
-        <TodaysBriefing articles={articles} />
-
-        {/* Ad between Briefing and Latest News */}
-        <div className="border-b border-border bg-surface">
-          <div className="shell py-4 min-w-0">
-            <AdBanner slot="homepage-between-briefing-news" format="leaderboard" />
-          </div>
-        </div>
-
-        {/* Latest News + sidebar — uses DB articles */}
-        <LatestNews articles={articles} />
+        {/* Front page editorial news — dynamically personalized for logged-in students */}
+        <HomePersonalizedFeed articles={articles} stats={heroStats} />
 
         {/* Explore Destinations */}
         <ExploreDestinations countries={countries} />
 
-        {/* University discovery */}
-        <FindYourUniversity universities={universities} />
+        {/* University discovery — personalized for student target country and study level */}
+        <UniversitiesPersonalizedWrapper universities={universities} />
 
         {/* Ad between universities and scholarships */}
         <div className="border-b border-border bg-surface">
